@@ -27,7 +27,7 @@ class TRADER():
     stop_timeout_of_waiting = 3 # время ожидания покупки ордера (необязательный параметр)
     percent_of_burse = 0.002 # комиссия биржы
     percent_of_additional_purchase = 2 #процент, при котором осуществляется дополнительная закупка
-    maximum_amount_for_buy = 3 #максимльное количество денег на которое можно закупаться
+    maximum_amount_for_buy = 10 #максимльное количество денег на которое можно закупаться
     percent_of_profit = 2 #процент при котором продаем валюту
 
     def __init__(self, pair, api):
@@ -78,6 +78,7 @@ class TRADER():
                 self.logging('\n' + '=' * 30 + ' STAGE REPORT ' + '=' * 30 + '\n')
                 print('\n' + '=' * 30 + ' STAGE REPORT ' + '=' * 30 + '\n')
                 #self.block_of_report()
+                self.flag = STAGE.BUY
                 return
         except ErrorEnoughCash as ex:
             self.logging(ex)
@@ -168,6 +169,8 @@ class TRADER():
         price = float(first_order[0]) - SATOSHI - self.substracted_value_of_price
         if self.is_currency_for_sell(quantity_for_sell):
             self.last_order_id = self._create_order_of_sell(quantity_for_sell, price)
+            print(self.last_order_id)
+            print(self.last_order_id + 1)
         else:
             if important:
                 raise ErrorEnoughCash('Недостаточно валюты для совершения продажи!')
@@ -245,7 +248,7 @@ class TRADER():
             return True
         self.logging(u'Есть открытые ордера!')
         for order in open_orders[self.pair]:
-            if self.last_order_id == order['order_id']:
+            if self.last_order_id == int(order['order_id']):
                 self.logging(u'Нужный ордер найден!')
                 return False
         self.logging(u'Нужный ордер не найден!')
@@ -272,9 +275,9 @@ class TRADER():
         price_with_profit = self.calc_price_by_last_purchases(last_purchases, is_profit=True)
         price_without_profit = self.calc_price_by_last_purchases(last_purchases, is_profit=False)
         current_price_of_sell = float(self.get_first_order_of_sell()[0])
-        price_difference = (price_without_profit/current_price_of_sell) * 100 - 100
-        price_difference_with_profit = (price_with_profit/current_price_of_sell) * 100 - 100
-        self.logging(u'Цена без профита (чтобы выйти в ноль) - %s. Цена с профитом - %s. Профи - %s.' % (price_without_profit, price_with_profit, self.percent_of_profit))
+        price_difference = (current_price_of_sell/price_without_profit) * 100 - 100
+        price_difference_with_profit = (current_price_of_sell/price_with_profit) * 100 - 100
+        self.logging(u'Цена продажи - %s. Цена без профита (чтобы выйти в ноль) - %s. Цена с профитом - %s. Профи - %s.' % (current_price_of_sell, price_without_profit, price_with_profit, self.percent_of_profit))
         self.logging(u'Процент между ценой продажи из стакана и нашей средней цены продажи без профита - %s' % price_difference)
         if price_difference < - self.percent_of_additional_purchase:
             self.logging(u'Условие закупа соблюдается.')
@@ -284,12 +287,14 @@ class TRADER():
             if amount < self.maximum_amount_for_buy:
                 self.logging(u'Колличество валюты которое было продано не превышает лимит!')
                 self.create_order_of_buy()
+                self.reset_timeout_of_waiting()
                 self.flag = STAGE.WAIT_BUY
                 return
             self.logging(u'Колличество валюты которые было продано превышает лимит!')
-        elif price_with_profit < current_price_of_sell:
+        elif price_with_profit <= current_price_of_sell:
             quantity_for_sell = self.__get_quantity_by_last_orders(last_purchases)
             self.create_order_of_sell(quantity_for_sell)
+            self.reset_timeout_of_waiting()
             self.flag = STAGE.WAIT_SELL
             return
         self.logging(u'Продолжаем ждать профит...')
@@ -340,22 +345,29 @@ class TRADER():
 if __name__ == '__main__':
     api = Exmo('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
     trader = TRADER('ETH_USD', api)
-    trader.quantity_cash_of_buy = 10.
+    trader.quantity_cash_of_buy = 8.
     trader.substracted_value_of_price = 0.
     #trader.minimum_cash_in_currency = 0.00000142
     trader2 = TRADER('BCH_USD', api)
-    trader2.quantity_cash_of_buy = 10.
+    trader2.quantity_cash_of_buy = 4.
     trader2.substracted_value_of_price = 0.
+    trader3 = TRADER('DXT_USD', api)
+    trader3.quantity_cash_of_buy = 4.
+    trader3.substracted_value_of_price = 0.
+    trader4 = TRADER('BTC_USD', api)
+    trader4.quantity_cash_of_buy = 10.
+    trader4.substracted_value_of_price = 0.
     #trader.minimum_cash_in_currency = 0.00000142
     container = []
     container.append(trader)
     container.append(trader2)
-    print(container)
+    container.append(trader3)
+    container.append(trader4)
     while 1:
         for tr in container:
             tr.run()
-            print(tr)
-            time.sleep(15)
+            print(tr.pair)
+            time.sleep(5)
     # t1 = time.time()
     # last_purchases = trader.get_last_purchases()
     # trader.block_of_wait_profit()
