@@ -4,10 +4,12 @@
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/BCH_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/BTC_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/DASH_USD.txt" charset="windows-1251" />
+    <file url="file://$PROJECT_DIR$/LOGS/EXMO/DXT_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/EOS_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/ETH_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/ETH_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/LTC_USD.txt" charset="windows-1251" />
+    <file url="file://$PROJECT_DIR$/LOGS/EXMO/STQ_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/WAVES_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/ZEC_USD.txt" charset="windows-1251" />
   </component>
