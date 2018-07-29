@@ -61,23 +61,26 @@ class Exmo(ExmoAPI, MotherOfBurse):
 
 
 
-if __name__ == '__main__':
-    btc = 0.001518956
-    price = 6570
+#if __name__ == '__main__':
+    #btc = 0.001518956
+    #price = 6570
 
-    price_with_percent = price + (price * 0.02)
-    end_usd1 = price_with_percent * btc
+    #price_with_percent = price + (price * 0.02)
+    #end_usd1 = price_with_percent * btc
 
-    end_usd_with_kommission = end_usd1 - (end_usd1 * 0.002)
+    #end_usd_with_kommission = end_usd1 - (end_usd1 * 0.002)
 
-    price_with_percent_and_kommission = price + (price * 0.018)
-    end_usd2 = price_with_percent_and_kommission * btc
+    #price_with_percent_and_kommission = price + (price * 0.018)
+    #end_usd2 = price_with_percent_and_kommission * btc
 
-    print('usd 1 - %s' % end_usd_with_kommission)
-    print('usd 2 - %s' % end_usd2)
+    #print('usd 1 - %s' % end_usd_with_kommission)
+    #print('usd 2 - %s' % end_usd2)
 
-    usd_before = btc * price
-    percent_of_usd_after_and_before = (end_usd1 - usd_before) * 100 / usd_before
+    #usd_before = btc * price
+    #percent_of_usd_after_and_before = (end_usd1 - usd_before) * 100 / usd_before
+
+#api = Exmo('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
+#trades = api.order_trades("1040878357")
     # e = Exmo('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
     # #print(e.get_open_orders())
     # #print(e.api_query('user_trades', {'pair':'BTC_USD', 'limit': '100', 'offset': '0'}))

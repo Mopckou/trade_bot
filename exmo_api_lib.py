@@ -133,11 +133,3 @@ class ExmoAPI:
 # }
 # print(order_create)
 # print(ExmoAPI_instance.api_query('order_create', order_create))
-
-a = 7432
-
-b = 6992
-
-diff = b/a*100 - 100
-
-print(diff < -5.93)

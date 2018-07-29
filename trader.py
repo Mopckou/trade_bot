@@ -24,10 +24,10 @@ class TRADER():
     substracted_value_of_price = 0. # колличество валюты которые мы отнимает от цены в оредере (необзательный параметр)
     flag_check_partial_purchase = False # флаг анализировать ли частичную покупку оредера (необязательный параметр)
     count_order_trades = 0 # колличество сделок по ордеру
-    stop_timeout_of_waiting = 3 # время ожидания покупки ордера (необязательный параметр)
+    stop_timeout_of_waiting = 420 # время ожидания покупки ордера (необязательный параметр)
     percent_of_burse = 0.002 # комиссия биржы
     percent_of_additional_purchase = 2 #процент, при котором осуществляется дополнительная закупка
-    maximum_amount_for_buy = 10 #максимльное количество денег на которое можно закупаться
+    maximum_amount_for_buy = 15 #максимльное количество денег на которое можно закупаться
     percent_of_profit = 2 #процент при котором продаем валюту
 
     def __init__(self, pair, api):
@@ -225,7 +225,9 @@ class TRADER():
             return
         if self.is_timeout():
             self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.SELL...')
-            self.flag = STAGE.SELL
+            open_orders = self.api.get_open_orders()
+            self.cancel_all_open_orders(open_orders[self.pair])
+            self.flag = STAGE.BUY
             self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
@@ -238,7 +240,7 @@ class TRADER():
         return False
 
     def is_timeout(self):
-        return self.timeout_of_waiting - time.time() > self.stop_timeout_of_waiting
+        return time.time() - self.timeout_of_waiting > self.stop_timeout_of_waiting
 
     def _order_is_purchased(self):
         open_orders = self.api.get_open_orders()
@@ -336,6 +338,7 @@ class TRADER():
         last_purchases = []
         for user_trade in user_trades:
             if user_trade['type'] == 'sell': # цикл до первой продажи, для выделения массива последних покупок
+                self.logging(u'Пследние ордера покупок (количество - %s) - %s' % (len(last_purchases), last_purchases))
                 return last_purchases
             last_purchases.append(user_trade)
         self.logging(u'Пследние ордера покупок (количество - %s) - %s' % (len(last_purchases), last_purchases))
@@ -351,9 +354,9 @@ if __name__ == '__main__':
     trader2 = TRADER('BCH_USD', api)
     trader2.quantity_cash_of_buy = 4.
     trader2.substracted_value_of_price = 0.
-    trader3 = TRADER('DXT_USD', api)
-    trader3.quantity_cash_of_buy = 4.
-    trader3.substracted_value_of_price = 0.
+    #trader3 = TRADER('DXT_USD', api)
+    #trader3.quantity_cash_of_buy = 4.
+    #trader3.substracted_value_of_price = 0.
     trader4 = TRADER('BTC_USD', api)
     trader4.quantity_cash_of_buy = 10.
     trader4.substracted_value_of_price = 0.
@@ -361,13 +364,13 @@ if __name__ == '__main__':
     container = []
     container.append(trader)
     container.append(trader2)
-    container.append(trader3)
+    #container.append(trader3)
     container.append(trader4)
     while 1:
         for tr in container:
             tr.run()
             print(tr.pair)
-            time.sleep(5)
+            time.sleep(30)
     # t1 = time.time()
     # last_purchases = trader.get_last_purchases()
     # trader.block_of_wait_profit()
