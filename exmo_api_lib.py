@@ -28,7 +28,7 @@ class ExmoAPI:
             "Key": self.API_KEY,
             "Sign": sign
         }
-        conn = http.client.HTTPSConnection(self.API_URL)
+        conn = http.client.HTTPSConnection(self.API_URL, timeout=5*60)
         conn.request("POST", "/" + self.API_VERSION + "/" + api_method, params, headers)
         response = conn.getresponse().read()
 

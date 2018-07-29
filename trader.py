@@ -1,7 +1,7 @@
 import time
 import errno
 import os
-from exmo_api_lib import ExmoAPI
+from socket import timeout
 from burse import Exmo
 LOG_DIRECTORY = os.path.join(os.getcwd(), 'LOGS')
 NAME_LOG = 'log.txt'
@@ -27,7 +27,7 @@ class TRADER():
     substracted_value_of_price = 0. # колличество валюты которые мы отнимает от цены в оредере (необзательный параметр)
     flag_check_partial_purchase = True # флаг анализировать ли частичную покупку оредера (необязательный параметр)
     count_order_trades = 0 # колличество сделок по ордеру
-    stop_timeout_of_waiting = 420 # время ожидания покупки ордера (необязательный параметр)
+    stop_timeout_of_waiting = 600 # время ожидания покупки ордера (необязательный параметр)
     percent_of_burse = 0.002 # комиссия биржы
     percent_of_additional_purchase = 2 #процент, при котором осуществляется дополнительная закупка
     maximum_amount_for_buy = 20 #максимльное количество денег на которое можно закупаться
@@ -87,6 +87,9 @@ class TRADER():
                 return
         except ErrorEnoughCash as ex:
             self.logging(ex)
+        except timeout as ex:
+            self.logging(u'Вышел таймаут на подключение к серверу. Ошибка - %s' % ex)
+            print('TIMEOUT!!!')
         except OSError as ex:
             self.logging(ex)
             if ex.errno not in [errno.ECONNABORTED, errno.ECONNRESET, errno.ETIMEDOUT]:
@@ -175,7 +178,7 @@ class TRADER():
             self.logging(u'Первая покупка по стандартной цене - %s.' % self.quantity_cash_of_buy)
             return self.quantity_cash_of_buy
         for order in last_orders:
-            if order['type'] == 'buy':
+            if order['type'] == 'sell':
                 continue
             amount = float(order['amount'])
             new_amount = amount * self.coeff_increase_of_cash
@@ -255,9 +258,9 @@ class TRADER():
             self.count_order_trades = 0
             return
         if self.is_timeout():
-            self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.SELL...')
-            open_orders = self.api.get_open_orders()
-            self.cancel_all_open_orders(open_orders[self.pair])
+            self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.BUY...')
+            #open_orders = self.api.get_open_orders()
+            #self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.BUY
             self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
