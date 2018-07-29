@@ -84,7 +84,6 @@ class TRADER():
             self.logging(ex)
         except OSError as ex:
             self.logging(ex)
-            pass
             if ex.errno not in [errno.ECONNABORTED, errno.ECONNRESET, errno.ETIMEDOUT]:
                 raise
         except Exception as ex:
