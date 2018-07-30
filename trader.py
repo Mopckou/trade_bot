@@ -95,6 +95,10 @@ class TRADER():
             if ex.errno not in [errno.ECONNABORTED, errno.ECONNRESET, errno.ETIMEDOUT]:
                 raise
         except Exception as ex:
+            if '40016' in ex.__str__():
+                self.logging(u'На сервере ведутся технические работы.')
+                time.sleep(420)
+                return
             self.logging(ex)
             raise
 
