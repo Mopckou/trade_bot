@@ -81,6 +81,7 @@ class Exmo(ExmoAPI, MotherOfBurse):
 
 #api = Exmo('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
 #trades = api.order_trades("1040878357")
+#print(trades['trades'])
     # e = Exmo('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
     # #print(e.get_open_orders())
     # #print(e.api_query('user_trades', {'pair':'BTC_USD', 'limit': '100', 'offset': '0'}))

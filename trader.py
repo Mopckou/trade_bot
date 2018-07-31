@@ -31,7 +31,7 @@ class TRADER():
     percent_of_burse = 0.002 # комиссия биржы
     percent_of_additional_purchase = 2 #процент, при котором осуществляется дополнительная закупка
     maximum_amount_for_buy = 20 #максимльное количество денег на которое можно закупаться
-    percent_of_profit = 2 #процент при котором продаем валюту
+    percent_of_profit = 1 #процент при котором продаем валюту
     increase_cash_of_buy = True # флаг повышать ли цену покупки при каждом закупе
     coeff_increase_of_cash = 2. # коэффициент увеличения цены при каждом закупе
 
@@ -253,6 +253,8 @@ class TRADER():
         if self.is_timeout():
             self.logging(u'wait buy is timeout! Flag = stage.buy')
             self.flag = STAGE.BUY
+            open_orders = self.api.get_open_orders()
+            self.cancel_all_open_orders(open_orders[self.pair])
             self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
@@ -263,8 +265,8 @@ class TRADER():
             return
         if self.is_timeout():
             self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.BUY...')
-            #open_orders = self.api.get_open_orders()
-            #self.cancel_all_open_orders(open_orders[self.pair])
+            open_orders = self.api.get_open_orders()
+            self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.BUY
             self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
@@ -441,6 +443,7 @@ if __name__ == '__main__':
     trader2.quantity_cash_of_buy = 4.
     trader2.substracted_value_of_price = 0.
     trader3 = TRADER('DXT_USD', api)
+    trader3.minimum_cash_in_currency = 0.0000009
     trader3.quantity_cash_of_buy = 4.
     trader3.substracted_value_of_price = 0.
     trader4 = TRADER('BTC_USD', api)
