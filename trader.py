@@ -2,6 +2,7 @@ import time
 import errno
 import os
 from socket import timeout
+from ssl import SSLEOFError
 from burse import Exmo
 LOG_DIRECTORY = os.path.join(os.getcwd(), 'LOGS')
 NAME_LOG = 'log.txt'
@@ -94,6 +95,9 @@ class TRADER():
             self.logging(ex)
             if ex.errno not in [errno.ECONNABORTED, errno.ECONNRESET, errno.ETIMEDOUT]:
                 raise
+        except SSLEOFError as ex:
+            self.logging(u'Ошиюка SSL - %s' % ex)
+            print('SSL ERROR')
         except Exception as ex:
             self.logging(ex)
             raise
@@ -203,8 +207,6 @@ class TRADER():
         price = float(first_order[0]) - SATOSHI - self.substracted_value_of_price
         if self.is_currency_for_sell(quantity_for_sell):
             self.last_order_id = self._create_order_of_sell(quantity_for_sell, price)
-            print(self.last_order_id)
-            print(self.last_order_id + 1)
         else:
             if important:
                 raise ErrorEnoughCash('Недостаточно валюты для совершения продажи!')
