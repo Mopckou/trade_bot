@@ -23,7 +23,7 @@ class STAGE:
 
 class TRADER():
     flag = STAGE.BUY
-    minimum_cash_in_currency = SATOSHI # колличество валюты в паре (например в BTC) при котором считаем что надо завержить сделку и переходим в блок stage.sell
+    minimum_cash_in_currency = 0. # колличество валюты в паре (например в BTC) при котором считаем что надо завержить сделку и переходим в блок stage.sell
     quantity_cash_of_buy = 0. # колличество валюты которые мы хотим потратить на покупку например BTC. (обязательный параметр)
     substracted_value_of_price = 0. # колличество валюты которые мы отнимает от цены в оредере (необзательный параметр)
     flag_check_partial_purchase = True # флаг анализировать ли частичную покупку оредера (необязательный параметр)
@@ -40,6 +40,9 @@ class TRADER():
         self.pair = pair
         self.api = api
         self.create_log_file(pair, api)
+        self.in_currency = self.__get_in_currency()
+        self.out_currency = self.__get_out_currency()
+
 
     def create_log_file(self, pair, api):
         name_folder = '%s' % api
@@ -110,7 +113,7 @@ class TRADER():
         open_orders = self.api.get_open_orders()
         if self.is_open_orders(open_orders):
             self.cancel_all_open_orders(open_orders[self.pair])
-        if self.is_currency_in_pair():
+        if self.is_more_currency_in_pair():
             self.flag = STAGE.SELL
             return
         else:
@@ -118,7 +121,6 @@ class TRADER():
             self.flag = STAGE.WAIT_BUY
             self.reset_timeout_of_waiting()
             return
-
 
     def is_open_orders(self, open_orders):
         self.logging('open order - %s' % open_orders)
@@ -135,12 +137,23 @@ class TRADER():
             self.logging('order is cancel')
 
     def is_currency(self, currency, cash):
-        self.logging('is_currency_in_pair')
         balances = self.__get_balances()
         if float(balances[currency]) == cash or float(balances[currency]) > cash:
             self.logging('money is enough. Currency - %s, cash - %s' % (currency, cash))
             return True
         self.logging('not money. Currency - %s, cash - %s' % (currency, cash))
+        return False
+
+    def is_more_currency_in_pair(self):
+        return self.is_more_currency(self.in_currency, self.minimum_cash_in_currency)
+
+    def is_more_currency(self, currency, cash):
+        balances = self.__get_balances()
+        balance = float(balances[currency])
+        if balance > cash:
+            self.logging(u'На счету (%s) больше валюты чем - %s (%s).' % (balance, cash, currency))
+            return True
+        self.logging(u'На счету (%s) меньше валюты чем - %s (%s)' % (balance, cash, currency))
         return False
 
     def __get_balances(self):
@@ -155,17 +168,11 @@ class TRADER():
     def __get_in_currency(self):
         return self.pair.split('_')[0]
 
-    def is_currency_in_pair(self):
-        in_currency = self.__get_in_currency()
-        return self.is_currency(in_currency, self.minimum_cash_in_currency)
-
     def is_currency_for_buy(self, cash):
-        out_pair = self.__get_out_currency()
-        return self.is_currency(out_pair, cash)
+        return self.is_currency(self.out_currency, cash)
 
     def is_currency_for_sell(self, cash):
-        in_pair = self.pair.split('_')[0]
-        return self.is_currency(in_pair, cash)
+        return self.is_currency(self.in_currency, cash)
 
     def create_order_of_buy(self, important=True):
         first_order = self.get_first_order_of_buy()
@@ -181,17 +188,26 @@ class TRADER():
                 raise ErrorEnoughCash('Недостаточно валюты для совершения покупки!')
 
     def __get_new_amount_for_buy(self):
+        amounts = []
         last_orders = self.get_important_orders_for_re_calc()
         if last_orders == []:
-            self.logging(u'Первая покупка по стандартной цене - %s.' % self.quantity_cash_of_buy)
+            self.logging(u'Первая покупка по стандартной сумме - %s.' % self.quantity_cash_of_buy)
             return self.quantity_cash_of_buy
         for order in last_orders:
             if order['type'] == 'sell':
                 continue
-            amount = float(order['amount'])
-            new_amount = amount * self.coeff_increase_of_cash
-            self.logging(u'Цена последней покупки %s, новая цена - %s' % (amount, new_amount))
-            return new_amount
+            amounts.append(float(order['amount']))
+        amounts.sort()
+        amounts.reverse()
+        amount = amounts[0]
+        self.logging(u'Суммы что мы потратили на покупки (по убыванию) - %s' % amounts)
+        if amount < self.quantity_cash_of_buy:
+            self.logging(u'Наибольшая сумма которую потратили на покупку (%s), меньше суммы первой покупки (%s)' % (amount, self.quantity_cash_of_buy))
+            self.logging(u'Покупка по стандартной сумме - %s' % self.quantity_cash_of_buy)
+            return self.quantity_cash_of_buy
+        new_amount = amount * self.coeff_increase_of_cash
+        self.logging(u'Предыдущая наибольшая сумма покупки %s, новая сумма - %s' % (amount, new_amount))
+        return new_amount
 
     def _create_order_of_buy(self, amount, price):
         order_create_setup = {'pair': self.pair,
@@ -206,9 +222,8 @@ class TRADER():
             raise Exception('Error order create!')
         return answer['order_id']
 
-    def create_order_of_sell(self, quantity_for_sell, important=True):
-        first_order = self.get_first_order_of_sell()
-        price = float(first_order[0]) - SATOSHI - self.substracted_value_of_price
+    def create_order_of_sell(self, current_price_of_sell, quantity_for_sell, important=True):
+        price = current_price_of_sell - SATOSHI - self.substracted_value_of_price
         if self.is_currency_for_sell(quantity_for_sell):
             self.last_order_id = self._create_order_of_sell(quantity_for_sell, price)
         else:
@@ -266,10 +281,10 @@ class TRADER():
             self.count_order_trades = 0
             return
         if self.is_timeout():
-            self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.BUY...')
+            self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.SELL...')
             open_orders = self.api.get_open_orders()
             self.cancel_all_open_orders(open_orders[self.pair])
-            self.flag = STAGE.BUY
+            self.flag = STAGE.SELL
             self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
@@ -320,9 +335,10 @@ class TRADER():
         self.logging(u'Таймер сброшен!')
 
     def block_of_sell(self):
+        quantity_in_currency = float(self.__get_balances()[self.in_currency])
         last_important_purchases = self.get_important_orders_for_re_calc()
-        price_with_profit = self.calc_price_by_last_purchases(last_important_purchases, is_profit=True)
-        price_without_profit = self.calc_price_by_last_purchases(last_important_purchases, is_profit=False)
+        price_with_profit = self.calc_price_by_last_purchases(last_important_purchases, quantity_in_currency, is_profit=True)
+        price_without_profit = self.calc_price_by_last_purchases(last_important_purchases, quantity_in_currency, is_profit=False)
         current_price_of_sell = float(self.get_first_order_of_sell()[0])
         price_difference = (current_price_of_sell/price_without_profit) * 100 - 100
         price_difference_with_profit = (current_price_of_sell/price_with_profit) * 100 - 100
@@ -332,8 +348,8 @@ class TRADER():
             self.logging(u'Условие закупа соблюдается.')
             amount = self.__get_amount_by_last_orders(last_important_purchases)
             self.logging(u'Количество валюты которое было потрачено - %s' % amount)
-            print('ЗАКУП!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             if amount < self.maximum_amount_for_buy:
+                print('ЗАКУП - %s!' % self.pair)
                 self.logging(u'Колличество валюты которое было продано не превышает лимит!')
                 self.create_order_of_buy()
                 self.reset_timeout_of_waiting()
@@ -341,19 +357,33 @@ class TRADER():
                 return
             self.logging(u'Колличество валюты которые было продано превышает лимит!')
         elif price_with_profit <= current_price_of_sell:
-            quantity_for_sell = self.__get_quantity_by_last_orders(last_important_purchases)
-            self.create_order_of_sell(quantity_for_sell)
+            quantity_for_sell = self.__correction_quantity(
+                quantity_in_currency,
+                self.__get_quantity_by_last_orders(last_important_purchases)
+            )
+            self.create_order_of_sell(current_price_of_sell, quantity_for_sell)
             self.reset_timeout_of_waiting()
             self.flag = STAGE.WAIT_SELL
             return
         self.logging(u'Продолжаем ждать профит...')
 
+    def __correction_quantity(self, quantity_in_currency, quantity):
+        quantity_without_minimum = quantity_in_currency - self.minimum_cash_in_currency
+        self.logging(u'Количество валюты на счету %s (%s), количество с вычетом несгораемой суммы %s' % (
+            quantity_in_currency, self.in_currency, quantity_without_minimum
+        ))
+        percent = (quantity_without_minimum * 100 / quantity) - 100
+        self.logging(u'Процент между количеством без сгораемой величины и пересчитанным количеством - %s' % percent)
+        if percent >= 0 and percent < 0.1:
+            return quantity_without_minimum
+        raise Exception(u'Ошибка коррекции количества.')
+
+
     def get_important_orders_for_re_calc(self):
         last_orders = self.api.user_trades(self.pair)[self.pair]
         self.logging(u'user trades - %s' % last_orders)
-        in_currency = self.__get_in_currency()
-        cash_in_currency = float(self.__get_balances()[in_currency])
-        self.logging(u'Количество валюты на счету %s (%s)' % (cash_in_currency, in_currency))
+        cash_in_currency = float(self.__get_balances()[self.in_currency])
+        self.logging(u'Количество валюты на счету %s (%s)' % (cash_in_currency, self.in_currency))
         important_orders = []
         if self.__eq__(cash_in_currency):
             self.logging(u'Покупки еще не совершались.')
@@ -382,13 +412,16 @@ class TRADER():
         return sell, buy
 
     def __eq__(self, other):
-        return other >= 0 and other <= self.minimum_cash_in_currency
+        difference = other - self.minimum_cash_in_currency
+        return difference >= 0 and difference <= SATOSHI
 
 
-    def calc_price_by_last_purchases(self, last_purchases, is_profit=None):
-        quantity = self.__get_quantity_by_last_orders(last_purchases)
-        in_currency = self.__get_in_currency()
-        is_currency = self.is_currency(in_currency, quantity)
+    def calc_price_by_last_purchases(self, last_purchases, quantity_in_currency, is_profit=None):
+        quantity = self.__correction_quantity(
+            quantity_in_currency,
+            self.__get_quantity_by_last_orders(last_purchases)
+        )
+        is_currency = self.is_currency(self.in_currency, quantity)
         if not is_currency:
             raise Exception(u'ВНИМАНИЕ! Недостаточно средств на счету. Этой ошибки не должно быть!')
         amount = self.__get_amount_by_last_orders(last_purchases)
@@ -445,7 +478,7 @@ if __name__ == '__main__':
     trader2.quantity_cash_of_buy = 4.
     trader2.substracted_value_of_price = 0.
     trader3 = TRADER('DXT_USD', api)
-    trader3.minimum_cash_in_currency = 0.0000009
+    trader3.minimum_cash_in_currency = SATOSHI
     trader3.quantity_cash_of_buy = 4.
     trader3.substracted_value_of_price = 0.
     trader4 = TRADER('BTC_USD', api)
@@ -462,3 +495,4 @@ if __name__ == '__main__':
             tr.run()
             print(tr.pair)
             time.sleep(10)
+    orders = trader3.get_important_orders_for_re_calc()
