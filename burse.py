@@ -79,10 +79,8 @@ class Exmo(ExmoAPI, MotherOfBurse):
     #usd_before = btc * price
     #percent_of_usd_after_and_before = (end_usd1 - usd_before) * 100 / usd_before
 
-#api = Exmo('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
-#trades = api.order_trades("1040878357")
-#print(trades['trades'])
-    # e = Exmo('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
+#trades = api.user_info()#order_trades("1040878357")
+#print(trades)
     # #print(e.get_open_orders())
     # #print(e.api_query('user_trades', {'pair':'BTC_USD', 'limit': '100', 'offset': '0'}))
     # user_trades = e.api_query('user_trades', {"pair":"BTC_USD,LTC_USD", "limit":"10", "offset":"0"})
