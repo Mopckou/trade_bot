@@ -14,6 +14,12 @@ class ErrorFoundPurchases(Exception):
 class ErrorEnoughCash(Exception):
     pass
 
+class ErrorCalcAmount(Exception):
+    pass
+
+class ErrorDownPrice(Exception):
+    pass
+
 class STAGE:
     BUY = 0
     WAIT_BUY = 1
@@ -263,34 +269,50 @@ class TRADER():
         return first_order
 
     def block_of_wait_buy(self):
-        if self.order_is_purchased():
+        open_orders = self.api.get_open_orders()
+        if self.order_is_purchased(open_orders):
             self.flag = STAGE.SELL
             #self.last_order_id_of_buy = None
+            self.count_order_trades = 0
+            return
+        if not self.order_is_first(open_orders):
+            self.logging(u'Оредр перебит. Отмена ордера.')
+            self.cancel_all_open_orders(open_orders[self.pair])
+            self.flag = STAGE.BUY
             self.count_order_trades = 0
             return
         if self.is_timeout():
             self.logging(u'wait buy is timeout! Flag = stage.buy')
             self.flag = STAGE.BUY
-            open_orders = self.api.get_open_orders()
             self.cancel_all_open_orders(open_orders[self.pair])
             self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
     def block_of_wait_sell(self):
-        if self.order_is_purchased():
+        open_orders = self.api.get_open_orders()
+        if self.order_is_purchased(open_orders):
             self.flag = STAGE.REPORT
+            self.count_order_trades = 0
+            return
+        if not self.order_is_first(open_orders):
+            self.logging(u'Оредр перебит. Отмена ордера.')
+            self.cancel_all_open_orders(open_orders[self.pair])
+            self.flag = STAGE.SELL
             self.count_order_trades = 0
             return
         if self.is_timeout():
             self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.SELL...')
-            open_orders = self.api.get_open_orders()
             self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.SELL
             self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
-    def order_is_purchased(self):
-        if self._order_is_purchased():
+    def order_is_first(self, open_orders):
+        first_order = open_orders[0]
+        return self.last_order_id == int(first_order['order_id'])
+
+    def order_is_purchased(self, open_orders):
+        if self._order_is_purchased(open_orders):
             return True
         if self.flag_check_partial_purchase and self.is_partial_purchase():
             self.reset_timeout_of_waiting()
@@ -300,8 +322,7 @@ class TRADER():
     def is_timeout(self):
         return time.time() - self.timeout_of_waiting > self.stop_timeout_of_waiting
 
-    def _order_is_purchased(self):
-        open_orders = self.api.get_open_orders()
+    def _order_is_purchased(self, open_orders):
         self.logging(u'Проверка покупки ордера...')
         if not self.is_open_orders(open_orders):
             self.logging(u'Нет открытых ордеров!')
@@ -336,46 +357,49 @@ class TRADER():
         self.logging(u'Таймер сброшен!')
 
     def block_of_sell(self):
-        quantity_in_currency = float(self.__get_balances()[self.in_currency])
-        last_important_purchases = self.get_important_orders_for_re_calc()
-        price_with_profit = self.calc_price_by_last_purchases(last_important_purchases, quantity_in_currency, is_profit=True)
-        price_without_profit = self.calc_price_by_last_purchases(last_important_purchases, quantity_in_currency, is_profit=False)
-        current_price_of_sell = float(self.get_first_order_of_sell()[0])
-        price_difference = (current_price_of_sell/price_without_profit) * 100 - 100
-        price_difference_with_profit = (current_price_of_sell/price_with_profit) * 100 - 100
-        self.logging(u'Цена продажи - %s. Цена без профита (чтобы выйти в ноль) - %s. Цена с профитом - %s. Профи - %s.' % (current_price_of_sell, price_without_profit, price_with_profit, self.percent_of_profit))
-        self.logging(u'Процент между ценой продажи из стакана и нашей средней цены продажи без профита - %s' % price_difference)
-        if price_difference < - self.percent_of_additional_purchase:
-            self.logging(u'Условие закупа соблюдается.')
-            amount = self.__get_amount_by_last_orders(last_important_purchases)
-            self.logging(u'Количество валюты которое было потрачено - %s' % amount)
-            if amount < self.maximum_amount_for_buy:
-                print('ЗАКУП - %s!' % self.pair)
-                self.logging(u'Колличество валюты которое было продано не превышает лимит!')
+        try:
+            quantity_in_currency = float(self.__get_balances()[self.in_currency])
+            last_important_purchases = self.get_important_orders_for_re_calc()
+            amount = self.get_amount_for_sell(last_important_purchases)
+            quantity = self.get_quantity_for_sell(quantity_in_currency, last_important_purchases)
+            price_without_profit = self.__calc_price(amount, quantity, True)
+            price_with_profit = self.__calc_price(amount, quantity, False)
+            current_price_of_sell = float(self.get_first_order_of_sell()[0])
+            price_difference = (current_price_of_sell/price_without_profit) * 100 - 100
+            self.logging(u'Цена продажи - %s. Цена без профита (чтобы выйти в ноль) - %s. Цена с профитом - %s. Профит - %s.' % (current_price_of_sell, price_without_profit, price_with_profit, self.percent_of_profit))
+            self.logging(u'Процент между ценой продажи из стакана и нашей средней цены продажи без профита - %s' % price_difference)
+            if price_difference < - self.percent_of_additional_purchase:
+                self.logging(u'Условие закупа соблюдается.')
+                if amount < self.maximum_amount_for_buy:
+                    print('ЗАКУП - %s!' % self.pair)
+                    self.logging(u'Колличество валюты которое было продано не превышает лимит!')
+                    raise ErrorDownPrice
+                self.logging(u'Колличество валюты которые было продано превышает лимит!')
+            elif price_with_profit <= current_price_of_sell:
+                self.create_order_of_sell(current_price_of_sell, quantity)
+                self.reset_timeout_of_waiting()
+                self.flag = STAGE.WAIT_SELL
+                return
+            self.logging(u'Продолжаем ждать профит...')
+        except ErrorCalcAmount:
+            self.logging(u'Сумма окупилась, но некоторое количество валюты не распродано. Закупаем еще!')
+            self.create_order_of_buy()
+            self.reset_timeout_of_waiting()
+            self.flag = STAGE.WAIT_BUY
+            return
+        except ErrorDownPrice:
+            self.create_order_of_buy()
+            self.reset_timeout_of_waiting()
+            self.flag = STAGE.WAIT_BUY
+            return
+        except Exception as ex:
+            if '50277' in ex.__str__():
+                self.logging(u'Количество на продажу меньше допустимого минимума. Закупаем еще.')
                 self.create_order_of_buy()
                 self.reset_timeout_of_waiting()
                 self.flag = STAGE.WAIT_BUY
                 return
-            self.logging(u'Колличество валюты которые было продано превышает лимит!')
-        elif price_with_profit <= current_price_of_sell:
-            quantity_for_sell = self.__correction_quantity(
-                quantity_in_currency,
-                self.__get_quantity_by_last_orders(last_important_purchases)
-            )
-            try:
-                self.create_order_of_sell(current_price_of_sell, quantity_for_sell)
-            except Exception as ex:
-                if '50277' in ex.__str__():
-                    self.logging(u'Количество на продажу меньше допустимого минимума. Закупаем еще.')
-                    self.create_order_of_buy()
-                    self.reset_timeout_of_waiting()
-                    self.flag = STAGE.WAIT_BUY
-                    return
-                raise
-            self.reset_timeout_of_waiting()
-            self.flag = STAGE.WAIT_SELL
-            return
-        self.logging(u'Продолжаем ждать профит...')
+            raise
 
     def __correction_quantity(self, quantity_in_currency, quantity):
         quantity_without_minimum = quantity_in_currency - self.minimum_cash_in_currency
@@ -430,15 +454,22 @@ class TRADER():
         #self.logging(difference)
         return difference >= 0 and difference <= SATOSHI * 10 # всегда остается остаток порядка 5 сатоши, условие чтобы остаток не превышал 10 сатоши
 
-    def calc_price_by_last_purchases(self, last_purchases, quantity_in_currency, is_profit=None):
-        quantity = self.__correction_quantity(
+    def get_amount_for_sell(self, last_important_purchases):
+        amount = self.__get_amount_by_last_orders(last_important_purchases)
+        self.logging(u'Количество валюты которое было потрачено - %s' % amount)
+        if amount < 0.:
+            raise ErrorCalcAmount
+
+    def get_quantity_for_sell(self, quantity_in_currency, last_important_purchases):
+        quantity_for_sell = self.__correction_quantity(
             quantity_in_currency,
-            self.__get_quantity_by_last_orders(last_purchases)
+            self.__get_quantity_by_last_orders(last_important_purchases)
         )
-        is_currency = self.is_currency(self.in_currency, quantity)
+        is_currency = self.is_currency(self.in_currency, quantity_for_sell)
         if not is_currency:
-            raise Exception(u'ВНИМАНИЕ! Недостаточно средств на счету. Этой ошибки не должно быть!')
-        amount = self.__get_amount_by_last_orders(last_purchases)
+            raise ErrorEnoughCash(u'ВНИМАНИЕ! Недостаточно средств на счету. Этой ошибки не должно быть!')
+
+    def __calc_price(self, amount, quantity, is_profit):
         amount += amount * self.percent_of_burse # прибавляем 0.2%, чтобы посчитать цену с учетом комиссии
         if is_profit:
             amount += amount * self.percent_of_profit / 100
@@ -542,4 +573,3 @@ if __name__ == '__main__':
             tr.run()
             print("%s   " % tr.pair, end="\r", flush=True)
             time.sleep(10)
-    orders = trader3.get_important_orders_for_re_calc()
