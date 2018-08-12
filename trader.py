@@ -30,7 +30,7 @@ class TRADER():
     count_order_trades = 0 # колличество сделок по ордеру
     stop_timeout_of_waiting = 900 # время ожидания покупки ордера (необязательный параметр)
     percent_of_burse = 0.002 # комиссия биржы
-    percent_of_additional_purchase = 2 #процент, при котором осуществляется дополнительная закупка
+    percent_of_additional_purchase = 1 #процент, при котором осуществляется дополнительная закупка
     maximum_amount_for_buy = 20 #максимльное количество денег на которое можно закупаться
     percent_of_profit = 1 #процент при котором продаем валюту
     increase_cash_of_buy = True # флаг повышать ли цену покупки при каждом закупе
@@ -86,7 +86,7 @@ class TRADER():
                 return self.block_of_wait_sell()
             elif self.flag == STAGE.REPORT:
                 self.logging('\n' + '=' * 30 + ' STAGE REPORT ' + '=' * 30 + '\n')
-                print('\n' + '=' * 30 + ' STAGE REPORT ' + '=' * 30 + '\n')
+                print('\n' + time.ctime() + ' =' + ' STAGE REPORT '+ self.pair + ' =' + '\n')
                 #self.block_of_report()
                 self.flag = STAGE.BUY
                 return
@@ -389,14 +389,12 @@ class TRADER():
             return round_quantity
         raise Exception(u'Ошибка коррекции количества.')
 
-
     def get_important_orders_for_re_calc(self):
         last_orders = self.api.user_trades(self.pair)[self.pair]
         self.logging(u'user trades - %s' % last_orders)
         cash_in_currency = float(self.__get_balances()[self.in_currency])
         self.logging(u'Количество валюты на счету %s (%s)' % (cash_in_currency, self.in_currency))
         important_orders = []
-        
         if self.__eq__(cash_in_currency):
             self.logging(u'Покупки еще не совершались.')
             return []
@@ -407,7 +405,10 @@ class TRADER():
             elif order['type'] == 'buy':
                 buy_quantity = float(order['quantity'])
                 cash_in_currency -= buy_quantity - (buy_quantity * self.percent_of_burse)
-            #self.logging('cash %s' % cash_in_currency)
+                #cash_in_currency = round(cash_in_currency, 9)
+            self.logging('cash %s' % cash_in_currency)
+            self.logging('cash round %s' % round(cash_in_currency, 9))
+            self.logging(self.__eq__(cash_in_currency))
             if self.__eq__(cash_in_currency):
                 sell, buy = self.get_count_sell_and_buy(important_orders)
                 self.logging(u'Пследние ордера покупок (количество закупок - %s, количество продаж - %s) - %s' % (buy, sell, len(important_orders)))
@@ -426,9 +427,8 @@ class TRADER():
 
     def __eq__(self, other):
         difference = other - self.minimum_cash_in_currency
-        self.logging(difference)
+        #self.logging(difference)
         return difference >= 0 and difference <= SATOSHI * 10 # всегда остается остаток порядка 5 сатоши, условие чтобы остаток не превышал 10 сатоши
-
 
     def calc_price_by_last_purchases(self, last_purchases, quantity_in_currency, is_profit=None):
         quantity = self.__correction_quantity(
@@ -451,8 +451,10 @@ class TRADER():
     def __get_amount_by_last_orders(self, orders):
         amount = 0.
         for order in orders:
+            self.logging('$$$' + order['amount'])
             if order['type'] == 'sell':
-                amount -= float(order['amount'])
+                sell_amount = float(order['amount'])
+                amount -= round(sell_amount, 8)
             elif order['type'] == 'buy':
                 amount += float(order['amount'])
         self.logging(u'Сумма денег, которые были потрачены за последние ордера - %s (до первой главной покупки, с учетом неполных продаж)' % amount)
@@ -466,6 +468,7 @@ class TRADER():
             elif order['type'] == 'buy':
                 buy_quantity = float(order['quantity'])
                 quantity += buy_quantity - (buy_quantity * self.percent_of_burse) # с вычетом процента комиссии
+                quantity = round(quantity, 8)
         self.logging(u'Сумма валюты что мы купили за последние ордера (котрую нужно реализовать) - %s' % quantity)
         return quantity
 
@@ -483,7 +486,6 @@ class TRADER():
 
 
 if __name__ == '__main__':
-    api = Exmo('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
     trader = TRADER('ETH_USD', api, 'bot')
     trader.quantity_cash_of_buy = 8.
     trader.substracted_value_of_price = 0.
@@ -497,6 +499,7 @@ if __name__ == '__main__':
     trader3.substracted_value_of_price = 0.
     trader4 = TRADER('BTC_USD', api, 'bot')
     trader4.quantity_cash_of_buy = 10.
+    trader4.maximum_amount_for_buy = 90
     trader4.substracted_value_of_price = 0.
     #trader.minimum_cash_in_currency = 0.00000142
     trader5 = TRADER('DOGE_BTC', api_vtoroi, 'drr')
@@ -504,23 +507,39 @@ if __name__ == '__main__':
     trader5.minimum_cash_in_currency = 0.0061486
     trader6 = TRADER('BTG_USD', api, 'bot')
     trader6.quantity_cash_of_buy = 10.
+    trader6.maximum_amount_for_buy = 40
     trader7 = TRADER('HBZ_USD', api, 'bot')
     trader7.quantity_cash_of_buy = 5.
     trader7.minimum_cash_in_currency = 998.00000001
+    trader7.maximum_amount_for_buy = 50
     trader8 = TRADER('HBZ_USD', api_vtoroi, 'drr')
     trader8.quantity_cash_of_buy = 5.
+    trader8.maximum_amount_for_buy = 40
+    trader9 = TRADER('XRP_USD', api, 'bot')
+    trader9.quantity_cash_of_buy = 6.
+    trader9.percent_of_additional_purchase = 0.4
+    trader9.percent_of_profit = 0.4
+    trader9.maximum_amount_for_buy = 40
+    trader10 = TRADER('USDT_USD', api, 'bot')
+    trader10.quantity_cash_of_buy = 3.5
+    trader10.percent_of_profit = 0.1
+    trader10.maximum_amount_for_buy = 30
+    trader10.percent_of_additional_purchase = 0.2
+    trader10.timeout_of_waiting = 120
     container = []
     container.append(trader)
     container.append(trader2)
-    container.append(trader3)
+    #container.append(trader3)
     container.append(trader4)
     container.append(trader5)
     container.append(trader6)
     container.append(trader7)
     container.append(trader8)
+    container.append(trader9)
+    container.append(trader10)
     while 1:
         for tr in container:
             tr.run()
-            print(tr.pair)
+            print("%s   " % tr.pair, end="\r", flush=True)
             time.sleep(10)
     orders = trader3.get_important_orders_for_re_calc()
