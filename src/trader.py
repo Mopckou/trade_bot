@@ -346,8 +346,19 @@ class TRADER():
             return
 
     def order_is_first(self, open_orders):
-        first_order = open_orders[self.pair][0]
-        return self.last_order_id == int(first_order['order_id'])
+        order = self.get_open_order_by_id(open_orders)
+        price, quantity, amount = order["price"], order["quantity"], order["amount"]
+        first_price, first_quantity, first_amount = self.get_first_trade(type)
+        return price == first_price and quantity == first_quantity and amount == first_amount
+
+    def get_first_trade(self, type):
+        order_book = self.api.get_order_book(self.pair)
+        order_book_by_pair = order_book[self.pair]
+        first_order = order_book_by_pair[type][0]
+        price = first_order[0]
+        quantity = first_order[1]
+        amount = first_order[2]
+        return price, quantity, amount
 
     def order_is_purchased(self, open_orders):
         if self._order_is_purchased(open_orders):
@@ -359,6 +370,11 @@ class TRADER():
 
     def is_timeout(self):
         return time.time() - self.timeout_of_waiting > self.stop_timeout_of_waiting
+
+    def get_open_order_by_id(self, open_orders):
+        for order in open_orders:
+            if self.last_order_id == int(order['order_id']):
+                return order
 
     def _order_is_purchased(self, open_orders):
         self.logging(u'Проверка покупки ордера...')
