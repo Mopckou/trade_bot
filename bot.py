@@ -11,9 +11,9 @@ DATABASE = os.path.abspath(
         os.path.split(__file__)[0], 'src', 'db', NAME
     )
 )
-binary_loc = r"C:\Program Files\Opera\55.0.2994.44\opera.exe"
-chrome_driver_loc = r"C:\Users\Ishimura\Downloads\operadriver_win64\operadriver_win64\operadriver.exe"
-opera_settings = r'C:\Users\Ishimura\AppData\Roaming\Opera Software\Opera Stable'
+binary_loc = r"C:\Users\a.ermakov\AppData\Local\Programs\Opera\55.0.2994.61\opera.exe"
+chrome_driver_loc = r"C:\Users\a.ermakov\Documents\GitHub\trade_bot\src\operadriver_win64\operadriver.exe"
+opera_settings = r'C:\Users\a.ermakov\AppData\Roaming\Opera Software\Opera Stable'
 
 options = webdriver.ChromeOptions()
 options.add_argument(r'--user-data-dir=%s' % opera_settings)

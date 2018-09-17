@@ -16,7 +16,7 @@ class TRADER_CONTROL:
         self.db = db
         self.commands = {
             'NEW': self.append_new_trader,
-            'EDIT': None,
+            'EDIT': self.edit_trader,
             'DELETE': None
         }
         self.burse = {
@@ -78,6 +78,55 @@ class TRADER_CONTROL:
         print('Пара не введена!')
         return False
 
+    def edit_trader(self, task):
+        data = json.loads(task.data)
+        pair = data['pair']
+        params = data['trader_data']
+        token_name = data['token_name']
+
+        result = self.__edit_trader_in_db(pair, token_name, params)
+        if result:
+            trader = self.__get_trader_in_container(pair, token_name)
+            self.update_params(trader, params)
+            self.report_edit_trader(task.user_id, task)
+            print('Изменены настройки пары!')
+            return True
+        print('Настройки пары не изменены!')
+        return False
+
+    def __edit_trader_in_db(self, pair, token_name, params):
+        traders = self.__get_traders_from_db()
+
+        for trader in traders:
+            if trader.pair == pair and trader.token_name == token_name:
+                trader.params = json.dumps(params)
+        try:
+            self.db.commit()
+        except Exception as e:
+            print(e)
+            return False
+
+        traders = self.__get_traders_from_db()
+        for trader in traders:
+            if trader.pair == pair and trader.token_name == token_name and trader.params == json.dumps(params):
+                return True
+        return False
+
+    def __get_traders_from_db(self):
+        traders = []
+        try:
+            traders = self.db.query(TRADE).all()
+            print()
+        except Exception as e:
+            print(e)
+        return traders
+
+    def __get_trader_in_container(self, pair, token_name):
+        for trader in self.container:
+            if trader.pair == pair and trader.account == token_name:
+                return trader
+
+
     def add_new_trader_in_db(self, burse, pair, token, params, token_name):
         trade = TRADE(burse, pair, token_name, json.dumps(token), json.dumps(params))
         try:
@@ -89,11 +138,7 @@ class TRADER_CONTROL:
         return True
 
     def first_update_container(self):
-        try:
-            trades = self.db.query(TRADE).all()
-        except Exception as e:
-            print(e)
-            return
+        trades = self.__get_traders_from_db()
 
         for trade in trades:
             self.back_trader_in_work(trade)
@@ -110,6 +155,11 @@ class TRADER_CONTROL:
 
     def report_new_trader(self, user_id, task):
         report = REPORT(user_id, 'Новая пара в работе! Задание номер - %s выполнено.' % task.id)
+        self.db.add(report)
+        self.db.commit()
+
+    def report_edit_trader(self, user_id, task):
+        report = REPORT(user_id, 'Настройки пары изменены! Задание номер - %s выполнено.' % (task.id))
         self.db.add(report)
         self.db.commit()
 

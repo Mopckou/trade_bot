@@ -65,6 +65,9 @@ class SESSION:
     def session_is_done(self):
         return self.__session_is_done
 
+    def put_session_complited(self):
+        self.__session_is_done = True
+
     def is_timeouted(self):
         return time.time() - self.time > self.timeout
 
@@ -179,7 +182,7 @@ class NEW(SESSION):
             self.send_msg('Не корректный номер. Повторите ввод.')
             return
         if txt == '0':
-            self.__session_is_done = True
+            self.put_session_complited()
             self.send_msg('Выход из сессии.')
             return
         elif txt == '1':
@@ -321,7 +324,7 @@ class NEW(SESSION):
                 self.send_msg(self.show_menu())
                 return
             self.send_msg('Новая пара зарегистрирована. \nОжидайте сообщение о начале работы новой пары. \n\nЗадание номер - %s.' % task_id)
-            self.__session_is_done = True
+            self.put_session_complited()
             return
 
 
@@ -733,7 +736,7 @@ class EDIT(SESSION):
             self.send_msg('Не корректный номер. Повторите ввод.')
             return
         if txt == '0':
-            self.__session_is_done = True
+            self.put_session_complited()
             self.send_msg('Выход из сессии.')
             return
         elif txt == '1':
@@ -829,7 +832,7 @@ class EDIT(SESSION):
                 self.send_msg(self.show_menu())
                 return
             self.send_msg('Изменение пары зарегистрировано. \nОжидайте сообщение о вступлении в силу изменений. \n\nЗадание номер - %s.' % task_id)
-            self.__session_is_done = True
+            self.put_session_complited()
             return
 
     def put_param(self, txt):
