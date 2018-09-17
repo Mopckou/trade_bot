@@ -1,4 +1,4 @@
-from src.exmo_api_lib import ExmoAPI
+from exmo_api_lib import ExmoAPI
 
 class MotherOfBurse:
 

@@ -1,30 +1,24 @@
+import time
 import errno
 import os
-import time
 from socket import timeout
 from ssl import SSLEOFError
-from src.burse import Exmo
-
+from burse import Exmo
 LOG_DIRECTORY = os.path.join(os.getcwd(), 'LOGS')
 NAME_LOG = 'log.txt'
 SATOSHI = 0.00000001
 
-
 class ErrorFoundPurchases(Exception):
     pass
-
 
 class ErrorEnoughCash(Exception):
     pass
 
-
 class ErrorCalcAmount(Exception):
     pass
 
-
 class ErrorDownPrice(Exception):
     pass
-
 
 class STAGE:
     BUY = 0
@@ -32,7 +26,6 @@ class STAGE:
     SELL = 2
     WAIT_SELL = 3
     REPORT = 4
-
 
 class TRADER():
     flag = STAGE.BUY
@@ -48,39 +41,15 @@ class TRADER():
     percent_of_profit = 1 #процент при котором продаем валюту
     increase_cash_of_buy = True # флаг повышать ли цену покупки при каждом закупе
     coeff_increase_of_cash = 2. # коэффициент увеличения цены при каждом закупе
-    is_end_trade = False
-    pair_is_complited = False
-    smoll_fraction = 15
 
-    params = {
-        'minimum_cash_in_currency': "Несгораемая сумма на счету.",
-        'quantity_cash_of_buy': "Закупочная сумма.",
-        'substracted_value_of_price': "Нет информации",
-        'flag_check_partial_purchase': "Проверка частичной покупки.",
-        'stop_timeout_of_waiting': "Таймаут ожидания покупки/продажи ордера. (сек)",
-        'percent_of_burse': "Комиссия биржы.",
-        'percent_of_additional_purchase': "Процент допольнительной закупки. (усреднение)",
-        'maximum_amount_for_buy': "Максимальное количество денег для закупки.",
-        'percent_of_profit': "Процент продажи.",
-        'increase_cash_of_buy': "Параметр повышения суммы закупки.",
-        'coeff_increase_of_cash': "Коэффициент увеличения суммы закупки.",
-        'is_end_trade': "Остановить пару после полной продажи."
-    }
-
-    def __init__(self, pair=None, api=None, account=None):
+    def __init__(self, pair, api, account):
         self.pair = pair
         self.api = api
         self.account = account
-        if pair is not None and api is not None and account is not None:
-            self.create_log_file(pair, api, account)
-        if pair is not None:
-            self.in_currency = self.__get_in_currency()
-            self.out_currency = self.__get_out_currency()
-
-    def set_pair(self, pair):
-        self.pair = pair
+        self.create_log_file(pair, api, account)
         self.in_currency = self.__get_in_currency()
         self.out_currency = self.__get_out_currency()
+
 
     def create_log_file(self, pair, api, account):
         name_folder = '%s' % api
@@ -124,7 +93,9 @@ class TRADER():
             elif self.flag == STAGE.REPORT:
                 self.logging('\n' + '=' * 30 + ' STAGE REPORT ' + '=' * 30 + '\n')
                 print('\n' + time.ctime() + ' =' + ' STAGE REPORT '+ self.pair + ' =' + '\n')
-                return self.block_of_report()
+                #self.block_of_report()
+                self.flag = STAGE.BUY
+                return
         except ErrorEnoughCash as ex:
             self.logging(ex)
         except timeout as ex:
@@ -157,13 +128,6 @@ class TRADER():
             self.flag = STAGE.WAIT_BUY
             self.reset_timeout_of_waiting()
             return
-
-    def block_of_report(self):
-        if self.is_end_trade:
-            self.pair_is_complited = True
-            return
-        self.flag = STAGE.BUY
-        return
 
     def is_open_orders(self, open_orders):
         self.logging('open order - %s' % open_orders)
@@ -220,7 +184,6 @@ class TRADER():
     def create_order_of_buy(self, important=True):
         first_order = self.get_first_order_of_buy()
         price = float(first_order[0]) + SATOSHI - self.substracted_value_of_price
-        price = round(price, 9)
         if self.increase_cash_of_buy:
             amount = self.__get_new_amount_for_buy()
         else:
@@ -234,7 +197,7 @@ class TRADER():
     def __get_new_amount_for_buy(self):
         amounts = []
         last_orders = self.get_important_orders_for_re_calc()
-        if not last_orders:
+        if last_orders == []:
             self.logging(u'Первая покупка по стандартной сумме - %s.' % self.quantity_cash_of_buy)
             return self.quantity_cash_of_buy
         for order in last_orders:
@@ -254,9 +217,8 @@ class TRADER():
         return new_amount
 
     def _create_order_of_buy(self, amount, price):
-        quantity = round(amount/price, 8)
         order_create_setup = {'pair': self.pair,
-                              'quantity': quantity,
+                              'quantity': amount/price,
                               'price': price,
                               'type': 'buy'
                               }
@@ -346,7 +308,7 @@ class TRADER():
             return
 
     def order_is_first(self, open_orders):
-        first_order = open_orders[self.pair][0]
+        first_order = open_orders[0]
         return self.last_order_id == int(first_order['order_id'])
 
     def order_is_purchased(self, open_orders):
@@ -400,8 +362,8 @@ class TRADER():
             last_important_purchases = self.get_important_orders_for_re_calc()
             amount = self.get_amount_for_sell(last_important_purchases)
             quantity = self.get_quantity_for_sell(quantity_in_currency, last_important_purchases)
-            price_without_profit = self.__calc_price(amount, quantity, False)
-            price_with_profit = self.__calc_price(amount, quantity, True)
+            price_without_profit = self.__calc_price(amount, quantity, True)
+            price_with_profit = self.__calc_price(amount, quantity, False)
             current_price_of_sell = float(self.get_first_order_of_sell()[0])
             price_difference = (current_price_of_sell/price_without_profit) * 100 - 100
             self.logging(u'Цена продажи - %s. Цена без профита (чтобы выйти в ноль) - %s. Цена с профитом - %s. Профит - %s.' % (current_price_of_sell, price_without_profit, price_with_profit, self.percent_of_profit))
@@ -447,7 +409,7 @@ class TRADER():
         ))
         percent = (round_quantity * 100 / quantity) - 100
         self.logging(u'Процент между количеством без сгораемой величины и пересчитанным количеством - %s' % percent)
-        if abs(percent) < 0.001:
+        if percent >= 0 and percent < 0.1:
             return round_quantity
         raise Exception(u'Ошибка коррекции количества.')
 
@@ -457,7 +419,7 @@ class TRADER():
         cash_in_currency = float(self.__get_balances()[self.in_currency])
         self.logging(u'Количество валюты на счету %s (%s)' % (cash_in_currency, self.in_currency))
         important_orders = []
-        if self.__equal(cash_in_currency):
+        if self.__eq__(cash_in_currency):
             self.logging(u'Покупки еще не совершались.')
             return []
         for order in last_orders:
@@ -470,8 +432,8 @@ class TRADER():
                 #cash_in_currency = round(cash_in_currency, 9)
             self.logging('cash %s' % cash_in_currency)
             self.logging('cash round %s' % round(cash_in_currency, 9))
-            self.logging(self.__equal(cash_in_currency))
-            if self.__equal(cash_in_currency):
+            self.logging(self.__eq__(cash_in_currency))
+            if self.__eq__(cash_in_currency):
                 sell, buy = self.get_count_sell_and_buy(important_orders)
                 self.logging(u'Пследние ордера покупок (количество закупок - %s, количество продаж - %s) - %s' % (buy, sell, len(important_orders)))
                 return important_orders
@@ -487,17 +449,16 @@ class TRADER():
                 buy += 1
         return sell, buy
 
-    def __equal(self, other):
+    def __eq__(self, other):
         difference = other - self.minimum_cash_in_currency
         #self.logging(difference)
-        return difference >= 0 and difference <= SATOSHI * self.smoll_fraction # всегда остается остаток порядка 5 сатоши, условие чтобы остаток не превышал 10 сатоши
+        return difference >= 0 and difference <= SATOSHI * 10 # всегда остается остаток порядка 5 сатоши, условие чтобы остаток не превышал 10 сатоши
 
     def get_amount_for_sell(self, last_important_purchases):
         amount = self.__get_amount_by_last_orders(last_important_purchases)
         self.logging(u'Количество валюты которое было потрачено - %s' % amount)
         if amount < 0.:
             raise ErrorCalcAmount
-        return amount
 
     def get_quantity_for_sell(self, quantity_in_currency, last_important_purchases):
         quantity_for_sell = self.__correction_quantity(
@@ -507,7 +468,6 @@ class TRADER():
         is_currency = self.is_currency(self.in_currency, quantity_for_sell)
         if not is_currency:
             raise ErrorEnoughCash(u'ВНИМАНИЕ! Недостаточно средств на счету. Этой ошибки не должно быть!')
-        return quantity_for_sell
 
     def __calc_price(self, amount, quantity, is_profit):
         amount += amount * self.percent_of_burse # прибавляем 0.2%, чтобы посчитать цену с учетом комиссии
@@ -554,3 +514,62 @@ class TRADER():
     #         last_purchases.append(user_trade)
     #     self.logging(u'Пследние ордера покупок (количество - %s) - %s' % (len(last_purchases), last_purchases))
     #     return last_purchases
+
+
+if __name__ == '__main__':
+    trader = TRADER('ETH_USD', api, 'bot')
+    trader.quantity_cash_of_buy = 8.
+    trader.substracted_value_of_price = 0.
+    #trader.minimum_cash_in_currency = 0.00000142
+    trader2 = TRADER('BCH_USD', api, 'bot')
+    trader2.quantity_cash_of_buy = 4.
+    trader2.substracted_value_of_price = 0.
+    trader3 = TRADER('DXT_USD', api, 'bot')
+    trader3.minimum_cash_in_currency = 0.0000001
+    trader3.quantity_cash_of_buy = 6.
+    trader3.substracted_value_of_price = 0.
+    trader4 = TRADER('BTC_USD', api, 'bot')
+    trader4.quantity_cash_of_buy = 10.
+    trader4.maximum_amount_for_buy = 90
+    trader4.substracted_value_of_price = 0.
+    #trader.minimum_cash_in_currency = 0.00000142
+    trader5 = TRADER('DOGE_BTC', api_vtoroi, 'drr')
+    trader5.quantity_cash_of_buy = 0.000051
+    trader5.minimum_cash_in_currency = 0.0061486
+    trader6 = TRADER('BTG_USD', api, 'bot')
+    trader6.quantity_cash_of_buy = 10.
+    trader6.maximum_amount_for_buy = 40
+    trader7 = TRADER('HBZ_USD', api, 'bot')
+    trader7.quantity_cash_of_buy = 5.
+    trader7.minimum_cash_in_currency = 998.00000001
+    trader7.maximum_amount_for_buy = 50
+    trader8 = TRADER('HBZ_USD', api_vtoroi, 'drr')
+    trader8.quantity_cash_of_buy = 5.
+    trader8.maximum_amount_for_buy = 40
+    trader9 = TRADER('XRP_USD', api, 'bot')
+    trader9.quantity_cash_of_buy = 6.
+    trader9.percent_of_additional_purchase = 0.4
+    trader9.percent_of_profit = 0.4
+    trader9.maximum_amount_for_buy = 40
+    trader10 = TRADER('USDT_USD', api, 'bot')
+    trader10.quantity_cash_of_buy = 3.5
+    trader10.percent_of_profit = 0.1
+    trader10.maximum_amount_for_buy = 30
+    trader10.percent_of_additional_purchase = 0.2
+    trader10.timeout_of_waiting = 120
+    container = []
+    container.append(trader)
+    container.append(trader2)
+    #container.append(trader3)
+    container.append(trader4)
+    container.append(trader5)
+    container.append(trader6)
+    container.append(trader7)
+    container.append(trader8)
+    container.append(trader9)
+    container.append(trader10)
+    while 1:
+        for tr in container:
+            tr.run()
+            print("%s   " % tr.pair, end="\r", flush=True)
+            time.sleep(10)
