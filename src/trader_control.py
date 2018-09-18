@@ -1,7 +1,7 @@
 import os
 import time
 import json
-from src.dbase import TASK, REPORT, TRADE
+from src.dbase import TASK, REPORT, TRADE, ARCHIVE
 from src.trader import TRADER
 from src.burse import Exmo
 from sqlalchemy import create_engine
@@ -126,7 +126,6 @@ class TRADER_CONTROL:
             if trader.pair == pair and trader.account == token_name:
                 return trader
 
-
     def add_new_trader_in_db(self, burse, pair, token, params, token_name):
         trade = TRADE(burse, pair, token_name, json.dumps(token), json.dumps(params))
         try:
@@ -154,19 +153,76 @@ class TRADER_CONTROL:
         print('Пара восстановлена после выключения бота. (%s)' % trader.pair)
 
     def report_new_trader(self, user_id, task):
-        report = REPORT(user_id, 'Новая пара в работе! Задание номер - %s выполнено.' % task.id)
-        self.db.add(report)
-        self.db.commit()
+        report = REPORT(user_id, 'Пара в работе! Задание номер - %s выполнено.' % task.id)
+        try:
+            self.db.add(report)
+            self.db.commit()
+        except Exception as e:
+            print(e)
 
     def report_edit_trader(self, user_id, task):
         report = REPORT(user_id, 'Настройки пары изменены! Задание номер - %s выполнено.' % (task.id))
-        self.db.add(report)
-        self.db.commit()
+        try:
+            self.db.add(report)
+            self.db.commit()
+        except Exception as e:
+            print(e)
+
+    def report_archive_trader(self, pair, err):
+        if err is None:
+            ans = 'На паре - %s торговля завершена. Ошибок нет. \n\nВведите команду /return для возообновления работы пары.' % (err)
+        else:
+            ans = 'Ошибка! Пара - %s выключена и помещена в архив!\nОшибка - %s.\n\nВведите команду /return для возообновления работы пары.' % (pair, err)
+        report = REPORT(0, ans)
+        try:
+            self.db.add(report)
+            self.db.commit()
+        except Exception as e:
+            print(e)
 
     def update_params(self, new_trader, params):
         for param in params:
             if new_trader.__getattribute__(param) != params[param]:
                 new_trader.__setattr__(param, params[param])
+
+    def put_trader_in_archive(self, trader, err):
+        traders = self.__get_traders_from_db()
+        for tr in traders:
+            if tr.pair == trader.pair and tr.token_name == trader.account:
+                result = self.__create_archive_trader(tr, err)
+                if result:
+                    res = self.__delete_trader_in_db(tr)
+                    print('Результат удаления пары - %s' % res)
+                    self.report_archive_trader(trader.pair, err)
+                    self.container.remove(trader)
+                    return True
+        return False
+
+    def __delete_trader_in_db(self, trader):
+        pair = trader.pair
+        token_name = trader.token_name
+        try:
+            self.db.delete(trader)
+            self.db.commit()
+        except Exception as e:
+            print(e)
+            return False
+
+        traders = self.__get_traders_from_db()
+        for trader in traders:
+            if trader.pair == pair and trader.token_name == token_name:
+                return False
+        return True
+
+    def __create_archive_trader(self, tr, err):
+        archive = ARCHIVE(tr.burse, tr.pair, tr.token_name, tr.tokens, tr.params, '%s' % err)
+        try:
+            self.db.add(archive)
+            self.db.commit()
+        except Exception as e:
+            print(e)
+            return False
+        return True
 
     def run(self):
         self.first_update_container()
@@ -181,11 +237,10 @@ class TRADER_CONTROL:
                     time.sleep(1)
                 except Exception as e:
                     print(e)
-                    self.put_trade_in_archive()
+                    self.put_trader_in_archive(trader, e)
             for trader in self.container:
                 if trader.pair_is_complited:
-                    print('Pair is delete')
-                    self.container.remove(trader)
+                    self.put_trader_in_archive(trader, None)
 
 NAME = 'TRADE_DATA_BASE.db'
 DATABASE = os.path.abspath(

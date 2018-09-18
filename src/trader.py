@@ -313,7 +313,7 @@ class TRADER():
             #self.last_order_id_of_buy = None
             self.count_order_trades = 0
             return
-        if not self.order_is_first(open_orders):
+        if not self.order_is_first(open_orders[self.pair], 'bid'):
             self.logging(u'Оредр перебит. Отмена ордера.')
             self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.BUY
@@ -332,7 +332,7 @@ class TRADER():
             self.flag = STAGE.REPORT
             self.count_order_trades = 0
             return
-        if not self.order_is_first(open_orders):
+        if not self.order_is_first(open_orders[self.pair], 'ask'):
             self.logging(u'Оредр перебит. Отмена ордера.')
             self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.SELL
@@ -345,7 +345,7 @@ class TRADER():
             self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
-    def order_is_first(self, open_orders):
+    def order_is_first(self, open_orders, type):
         order = self.get_open_order_by_id(open_orders)
         price, quantity, amount = order["price"], order["quantity"], order["amount"]
         first_price, first_quantity, first_amount = self.get_first_trade(type)

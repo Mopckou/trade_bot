@@ -4,7 +4,7 @@ import json
 import time
 from src.trader import LOG_DIRECTORY
 from src.trader import TRADER
-from src.dbase import TOKEN, TASK, REPORT, TRADE
+from src.dbase import TOKEN, TASK, REPORT, TRADE, DISPATCH, ARCHIVE
 from src.burse import Exmo
 from urllib.parse import quote_plus
 from selenium.common.exceptions import NoSuchElementException
@@ -14,7 +14,7 @@ TGBot = 'TBot'
 
 class SESSION:
     __session_is_done = False
-    timeout = 60
+    timeout = 900
 
     def __init__(self, chat_id, send_message):
         self.chat_id = chat_id
@@ -659,7 +659,7 @@ class EDIT(SESSION):
         return self.__pair_confirmed
 
     def show_menu(self):
-        pair = self.__get_user_pair()
+        pair = self.get_user_pair()
         menu = 'Редактирование настроек пары.\n' \
                '\n' \
                'Выберите номер:\n' \
@@ -723,7 +723,7 @@ class EDIT(SESSION):
             return []
         return traders
 
-    def __get_trader_data(self):
+    def get_trader_data(self):
         trader_data = {}
         for param in self.trader.params:
             trader_data.update(
@@ -758,14 +758,14 @@ class EDIT(SESSION):
             self.send_msg(self.show_menu_accept())
             return
 
-    def __get_user_pair(self):
+    def get_user_pair(self):
         if self.user_pair is None:
             return '...'
         else:
             return self.user_pair
 
     def put_item_menu_pair(self, txt):
-        trade_by_num = self.__get_trade_by_num()
+        trade_by_num = self.get_trade_by_num()
         if txt == '0':
             self.put_next_step(self.put_item_menu)
             self.send_msg(self.show_menu())
@@ -907,7 +907,7 @@ class EDIT(SESSION):
                 'token_name': self.trade_from_db.token_name,
                 'token': token,
                 'pair': self.trade_from_db.pair,
-                'trader_data': self.__get_trader_data()
+                'trader_data': self.get_trader_data()
             }
         )
         str_data = json.dumps(data)
@@ -920,7 +920,7 @@ class EDIT(SESSION):
             if new_trader.__getattribute__(param) != params[param]:
                 new_trader.__setattr__(param, params[param])
 
-    def __get_trade_by_num(self):
+    def get_trade_by_num(self):
         traders_list = {}
         traders = self.__get_traders
         for num, trader in enumerate(traders, 1):
@@ -933,9 +933,164 @@ class EDIT(SESSION):
 class DELETE():
     pass
 
-class ARCHIVE():
-    pass
+class RETURN(EDIT):
+    def __init__(self, chat_id, send_message, db):
+        super().__init__(chat_id, send_message, db)
 
+    def begin_chat(self, txt):
+        if txt == '/return':
+            self.put_next_step(self.put_item_menu)
+            #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
+            self.send_msg(self.show_menu())
+
+
+    def show_menu(self):
+        pair = self.get_user_pair()
+        menu = 'Архив пар.\n' \
+               '\n' \
+               'Выберите номер:\n' \
+               '1. Выбор пары - (%s)\n' \
+               '2. Настройки пары\n' \
+               '3. Подтверждение восстановления пары\n' \
+               '\n' \
+               '0. Выход.' \
+               '' % (pair)
+        return menu
+
+    def show_menu_pair(self):
+        menu = 'Выберите пару:\n'
+
+        traders = self.__get_traders
+        for num, trader in enumerate(traders, 1):
+            menu += '%s. Пара - (%s), Токен - (%s), Биржка - (%s), Ошибка - (%s).\n' % (num, trader.pair, trader.token_name, trader.burse, trader.error)
+
+        menu += '\n\n' \
+                '0. Назад'
+        return menu
+
+    def show_menu_accept(self):
+        menu = 'Вы уверены, что хотите восстановить пару? \n' \
+               '\n' \
+               'Выберите номер:\n' \
+               '1. Да\n'\
+               '0. Нет\n' \
+
+        return menu
+
+    @property
+    def __get_traders(self):
+        try:
+            traders = self.db.query(ARCHIVE).all()
+        except Exception as e:
+            self.logging(e)
+            return []
+        return traders
+
+    def put_item_menu_accept(self, txt):
+        if txt not in ['0', '1']:
+            self.send_msg('Не корректный номер. Повторите ввод.')
+            return
+        if txt == '0':
+            self.put_next_step(self.put_item_menu)
+            self.send_msg(self.show_menu())
+            return
+        elif txt == '1':
+            result, task_id = self.create_task()
+            if not result:
+                self.send_msg('Ошибка. Восстановление пары не зарегистрировано!')
+                self.put_next_step(self.put_item_menu)
+                self.send_msg(self.show_menu())
+                return
+            self.send_msg('Восстановление пары зарегистрировано. \nОжидайте сообщение о вступлении в силу изменений. \n\nЗадание номер - %s.' % task_id)
+            self.delete_trader_in_archive()
+            self.put_session_complited()
+            return
+
+    def create_task(self):
+        task = self.__create_task()
+        task_id = None
+        try:
+            self.db.add(task)
+            self.db.commit()
+        except Exception as ex:
+            self.logging(ex)
+            return False, task_id
+
+        try:
+            query = self.db.query(TASK).all()
+        except Exception as ex:
+            self.logging(ex)
+            return False, task_id
+
+        self.logging(query)
+        for task in query:
+            if task.create_time == task.create_time:
+                task_id = task.id
+        return True, task_id
+
+    def __create_task(self):
+        data = {}
+        token = json.loads(self.trade_from_db.tokens)
+        data.update(
+            {
+                'burse': self.trade_from_db.burse,
+                'token_name': self.trade_from_db.token_name,
+                'token': token,
+                'pair': self.trade_from_db.pair,
+                'trader_data': self.get_trader_data()
+            }
+        )
+        str_data = json.dumps(data)
+        task = TASK(self.chat_id, 'NEW', str_data)
+        self.logging(task)
+        return task
+
+    def get_trade_by_num(self):
+        traders_list = {}
+        traders = self.__get_traders
+        for num, trader in enumerate(traders, 1):
+            traders_list.update(
+                {str(num): trader}
+            )
+        return traders_list
+
+    def delete_trader_in_archive(self):
+        try:
+            self.db.delete(self.trade_from_db)
+            self.db.commit()
+        except Exception as e:
+            print(e)
+
+
+class SUBSCRIPTION(SESSION):
+    def __init__(self, chat_id, send_message, db):
+        super().__init__(chat_id, send_message)
+        self.reset_timeout()
+        self.db = db
+        self.put_next_step(self.begin_chat)
+        self.create_log_file(chat_id)
+
+    def begin_chat(self, txt):
+        if txt == '/sub':
+            dispatch = self.db.query(DISPATCH).all()
+            for d in dispatch:
+                if d.user_id == int(self.chat_id):
+                    self.send_msg('Вы уже подписаны на рассылку сообщений!')
+                    self.put_session_complited()
+                    return
+            d = DISPATCH(int(self.chat_id))
+            try:
+                self.db.add(d)
+                self.db.commit()
+            except Exception as e:
+                print(e)
+            else:
+                self.send_msg('Вы подписаны на рассылку уведомлений!')
+                self.put_session_complited()
+                return
+            # self.put_next_step(self.put_item_menu)
+            # #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
+            # self.send_msg(self.show_menu())
 
 
 
@@ -944,7 +1099,15 @@ class TBot:
     offset = 0
     active_of_session = {}
     special_commands = {'/new': NEW,
-                        '/edit': EDIT}
+                        '/edit': EDIT,
+                        '/return': RETURN,
+                        '/sub': SUBSCRIPTION}
+
+    ans = "Поддерживаемые команды:\n\n\n" \
+          "1. /new - создание новой пары\n\n" \
+          "2. /edit - редактирование настроек пары\n\n" \
+          "3. /return - восставноление пары из архива\n\n" \
+          "4. /sub - подписка на рассылку уведовлений"
 
     def __init__(self, opera_driver, token, db):
         self.browser = opera_driver
@@ -975,12 +1138,12 @@ class TBot:
     def clear_session_of_done(self):
         while 1:
             for chat_id in self.active_of_session:
+                if self.active_of_session[chat_id].session_is_done():
+                    self.active_of_session.pop(chat_id)
+                    break
                 if self.active_of_session[chat_id].is_timeouted():
                     self.active_of_session.pop(chat_id)
                     self.send_msg(chat_id, 'Сессия завершена.')
-                    break
-                if self.active_of_session[chat_id].session_is_done():
-                    self.active_of_session.pop(chat_id)
                     break
             else:
                 return
@@ -989,12 +1152,19 @@ class TBot:
         try:
             reports = self.db.query(REPORT).all()
             for report in reports:
-                self.send_msg(report.user_id, report.data)
+                if report.user_id == 0:
+                    self.send_all(report.data)
+                else:
+                    self.send_msg(report.user_id, report.data)
                 self.db.delete(report)
             self.db.commit()
         except Exception as e:
             print(e)
 
+    def send_all(self, data):
+        dispatch_all = self.db.query(DISPATCH).all()
+        for d in dispatch_all:
+            self.send_msg(d.user_id, data)
 
     def run(self):
         try:
@@ -1018,9 +1188,12 @@ class TBot:
                         )
                     if chat_id in self.active_of_session:
                         session = self.active_of_session[chat_id]
-                        session.run(txt)
+                        if session.session_is_done():
+                            self.send_msg(chat_id, self.ans)
+                        else:
+                            session.run(txt)
                     else:
-                        self.send_msg(chat_id, txt)#'Gde%0A20+20%D0%A2%D1%8B')
+                        self.send_msg(chat_id, self.ans)#'Gde%0A20+20%D0%A2%D1%8B')
                 self.clear_session_of_done()
                 self.send_message_to_all()
                 time.sleep(1)
@@ -1028,4 +1201,7 @@ class TBot:
             print('Ошибка получения элемента страницы.')
         except Exception as ex:
             print(ex)
-            raise
+            if ex == 'Error - 502':
+                print(u'Ошибка 502.')
+            else:
+                raise

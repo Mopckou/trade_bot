@@ -33,15 +33,20 @@ def create_bd(engine):
         Column('data', String)
     )
 
-    # archive = Table('Archive', metadata,
-    #     Column('id', Integer, primary_key=True),
-    #     Column('burse', String),
-    #     Column('token_name', String),
-    #     Column('trade_name', String),
-    #     Column('data', String),
-    #     Column('error_code', Integer),
-    #     Column('description', String)
-    #)
+    archive = Table('Archive', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('burse', String),
+        Column('pair', String),
+        Column('token_name', String),
+        Column('tokens', String),
+        Column('params', String),
+        Column('error', String)
+    )
+
+    dispatch = Table('Dispatch', metadata,
+        Column('id', Integer, primary_key=True),
+        Column('user_id', Integer),
+    )
 
     # token = Table('Token', metadata,
     #               Column('id', Integer, primary_key=True),
@@ -79,6 +84,29 @@ class TRADE(Base):
                      (self.burse, self.pair, self.token_name, self.tokens, self.params, self.data)
 
 
+class ARCHIVE(Base):
+    __tablename__ = 'ARCHIVE'
+    id = Column(Integer, primary_key=True)
+    burse = Column(String)
+    pair = Column(String)
+    token_name = Column(String)
+    tokens = Column(String)
+    params = Column(String)
+    error = Column(String)
+
+    def __init__(self, burse, pair, token_name, tokens, params, error):
+        self.burse = burse
+        self.pair = pair
+        self.token_name = token_name
+        self.tokens = tokens
+        self.params = params
+        self.error = error
+
+    def __repr__(self):
+        return "<ARCHIVE(burse - '%s', pair -'%s', token_name - '%s', tokens - '%s', params - '%s', error - '%s')>" % \
+                     (self.burse, self.pair, self.token_name, self.tokens, self.params, self.error)
+
+
 class TASK(Base):
     __tablename__ = 'Task'
     id = Column(Integer, primary_key=True)
@@ -113,6 +141,18 @@ class REPORT(Base):
     def __repr__(self):
         return "<Report('%s','%s')>" % \
                (self.user_id, self.data)
+
+class DISPATCH(Base):
+    __tablename__ = 'Dispatch'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer)
+
+    def __init__(self, user_id,):
+        self.user_id = user_id
+
+    def __repr__(self):
+        return "<Dispatch('%s')>" % \
+               (self.user_id)
 
 
 class TOKEN(Base):
@@ -180,19 +220,22 @@ if __name__ == '__main__':
 
     # Класс Session будет создавать Session-объекты, которые привязаны к базе данных
     session = Session()
-    print('Session:', session)
-    t = session.query(TRADE).all()
 
-    print(t)
-    session.delete(t[0])
-    session.commit()
-    #
-    t = session.query(TRADE).all()
-    print(t)
+
 
     # t = session.query(Task).filter_by(is_done=False).all()
     # print(t)
     print('___')
+    # arch = ARCHIVE('2', '2', '2', '2', '2', '2')
+    # session.add(arch)
+    # session.commit()
+    arc1 = session.query(ARCHIVE).all()
+    for arch in arc1:
+        print(arch.id)
+        session.delete(arch)
+    session.commit()
+
+
     # admin_user = TOKEN("EXMO44", "bot", "data-[1][2]")
     # admin_user2 = TOKEN("EXMO555", "bot", "data-[1][2]")
     #
