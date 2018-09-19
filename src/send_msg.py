@@ -1,9 +1,13 @@
-import json
-txt = '0'
-data = ['K-213', 'S-3231']
-dat = json.dumps(data)
+d = {
 
-print(dat)
+}
 
-d = json.loads(dat)
-print(d)
+def t():
+    try:
+        return
+    except:
+        pass
+    finally:
+        print('lsad')
+
+t()

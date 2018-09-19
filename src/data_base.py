@@ -7,7 +7,7 @@ from src.trader import TRADER
 from src.dbase import TOKEN, TASK, REPORT, TRADE, DISPATCH, ARCHIVE
 from src.burse import Exmo
 from urllib.parse import quote_plus
-from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 
 TGBot = 'TBot'
@@ -1090,7 +1090,157 @@ class SUBSCRIPTION(SESSION):
                 return
             # self.put_next_step(self.put_item_menu)
             # #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
-            # self.send_msg(self.show_menu())
+            # self.send_msg(self.show_menu()
+
+
+class INFO(SESSION):
+
+    def __init__(self, chat_id, send_message, db):
+        super().__init__(chat_id, send_message)
+        self.db = db
+        self.put_next_step(self.begin_chat)
+        self.create_log_file(chat_id)
+        self.user_pair = None
+        self.__pair_confirmed = False
+
+    def begin_chat(self, txt):
+        if txt == '/info':
+            self.put_next_step(self.put_item_main_menu)
+            #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
+            self.send_msg(self.show_main_menu())
+
+    def show_main_menu(self):
+        menu = 'Инфо.\n' \
+               '\n' \
+               'Выберите номер:\n' \
+               '1. Информация по одной паре\n' \
+               '2. Информация по всем парам\n' \
+               '\n' \
+               '0. Выход.'
+        return menu
+
+    def show_menu(self):
+        pair = self.get_user_pair()
+        menu = 'Инфо пары.\n' \
+               '\n' \
+               'Выберите номер:\n' \
+               '1. Выбор пары - (%s)\n' \
+               '2. Информация по паре\n' \
+               '\n' \
+               '0. Назад' \
+               '' % (pair)
+        return menu
+
+    def show_menu_pair(self):
+        menu = 'Выберите пару:\n'
+
+        traders = self.__get_traders
+        for num, trader in enumerate(traders, 1):
+            menu += '%s. Пара - (%s), Токен - (%s), Биржка - (%s).\n' % (num, trader.pair, trader.token_name, trader.burse)
+
+        menu += '\n\n' \
+                '0. Назад'
+        return menu
+
+    def put_item_main_menu(self, txt):
+        if txt not in ['0', '1', '2']:
+            self.send_msg('Не корректный номер. Повторите ввод.')
+            return
+        if txt == '0':
+            self.put_session_complited()
+            self.send_msg('Выход из сессии.')
+            return
+        elif txt == '1':
+            self.put_next_step(self.put_item_menu)
+            self.send_msg(self.show_menu())
+            return
+        elif txt == '2':
+            info = self.get_info()
+            self.send_msg(info)
+            self.send_msg(self.show_main_menu())
+            return
+
+    def put_item_menu(self, txt):
+        if txt not in ['0', '1', '2']:
+            self.send_msg('Не корректный номер. Повторите ввод.')
+            return
+        if txt == '0':
+            self.put_next_step(self.put_item_main_menu)
+            self.send_msg(self.show_main_menu())
+            return
+        elif txt == '1':
+            self.put_next_step(self.put_item_menu_pair)
+            self.send_msg(self.show_menu_pair())
+            return
+        elif txt == '2':
+            if not self.pair_is_confirmed():
+                self.send_msg('Выберите сначада пару!')
+                return
+            info = self.get_info(self.trade_from_db)
+            self.send_msg(info)
+            self.send_msg(self.show_menu())
+            return
+
+    def put_item_menu_pair(self, txt):
+        trade_by_num = self.get_trade_by_num()
+        if txt == '0':
+            self.put_next_step(self.put_item_menu)
+            self.send_msg(self.show_menu())
+            return
+        if txt not in trade_by_num:
+            self.send_msg('Некорректное значние! Повторите ввод!')
+            return
+        self.__pair_confirmed = True
+        self.trader = TRADER()
+        self.trade_from_db = trade_by_num[txt]
+        self.user_pair = self.trade_from_db.pair
+        self.send_msg('Пара выбрана!')
+        self.put_next_step(self.put_item_menu)
+        self.send_msg(self.show_menu())
+
+    def pair_is_confirmed(self):
+        return self.__pair_confirmed
+
+    def get_user_pair(self):
+        if self.user_pair is None:
+            return '...'
+        else:
+            return self.user_pair
+
+    @property
+    def __get_traders(self):
+        try:
+            traders = self.db.query(TRADE).all()
+        except Exception as e:
+            self.logging(e)
+            return []
+        return traders
+
+    def get_trade_by_num(self):
+        traders_list = {}
+        traders = self.__get_traders
+        for num, trader in enumerate(traders, 1):
+            traders_list.update(
+                {str(num): trader}
+            )
+        return traders_list
+
+    def get_info(self, trader=None):
+        info = 'ИНФО:\n'
+        if trader is None:
+            trader_list = self.__get_traders
+        else:
+            trader_list = [trader]
+
+        for trader in trader_list:
+            info += '%s | %s | %s :\n' % (trader.pair, trader.token_name, trader.burse)
+            if trader.data is None or trader.data == '':
+                info += 'Нет информации.\n\n'
+            else:
+                info += '%s\n\n' % trader.data
+
+        return info
+
 
 
 
@@ -1101,13 +1251,15 @@ class TBot:
     special_commands = {'/new': NEW,
                         '/edit': EDIT,
                         '/return': RETURN,
-                        '/sub': SUBSCRIPTION}
+                        '/sub': SUBSCRIPTION,
+                        '/info': INFO}
 
     ans = "Поддерживаемые команды:\n\n\n" \
-          "1. /new - создание новой пары\n\n" \
-          "2. /edit - редактирование настроек пары\n\n" \
-          "3. /return - восставноление пары из архива\n\n" \
-          "4. /sub - подписка на рассылку уведовлений"
+          "/info - информация по парам\n\n" \
+          "/new - создание новой пары\n\n" \
+          "/edit - редактирование настроек пары\n\n" \
+          "/return - восставноление пары из архива\n\n" \
+          "/sub - подписка на рассылку уведовлений"
 
     def __init__(self, opera_driver, token, db):
         self.browser = opera_driver
@@ -1199,6 +1351,8 @@ class TBot:
                 time.sleep(1)
         except NoSuchElementException:
             print('Ошибка получения элемента страницы.')
+        except TimeoutException:
+            print('TIMEOUT!')
         except Exception as ex:
             print(ex)
             if ex == 'Error - 502':

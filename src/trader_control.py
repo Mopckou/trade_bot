@@ -29,9 +29,6 @@ class TRADER_CONTROL:
         except Exception as ex:
             print(ex)
             return False
-        print(
-            tasks != []
-              )
         return tasks != []
 
     def update_container(self):
@@ -66,7 +63,7 @@ class TRADER_CONTROL:
         token_name = data['token_name']
 
         api = self.burse[burse](token[0], token[1])
-        new_trader = TRADER(pair, api, token_name)
+        new_trader = TRADER(self.db, pair, api, token_name)
         self.update_params(new_trader, params)
 
         result = self.add_new_trader_in_db(burse, pair, token, params, token_name)
@@ -147,7 +144,7 @@ class TRADER_CONTROL:
         token = json.loads(trade.tokens)
         api = self.burse[trade.burse](token[0], token[1])
 
-        trader = TRADER(trade.pair, api, trade.token_name)
+        trader = TRADER(self.db, trade.pair, api, trade.token_name)
         self.update_params(trader, params)
         self.container.append(trader)
         print('Пара восстановлена после выключения бота. (%s)' % trader.pair)

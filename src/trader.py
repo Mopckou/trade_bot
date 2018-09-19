@@ -3,6 +3,7 @@ import os
 import time
 from socket import timeout
 from ssl import SSLEOFError
+from src.dbase import TRADE, REPORT
 from src.burse import Exmo
 
 LOG_DIRECTORY = os.path.join(os.getcwd(), 'LOGS')
@@ -67,10 +68,12 @@ class TRADER():
         'is_end_trade': "Остановить пару после полной продажи."
     }
 
-    def __init__(self, pair=None, api=None, account=None):
+    def __init__(self, db=None, pair=None, api=None, account=None):
         self.pair = pair
         self.api = api
         self.account = account
+        self.db = db
+        self.pair_info = None
         if pair is not None and api is not None and account is not None:
             self.create_log_file(pair, api, account)
         if pair is not None:
@@ -108,23 +111,25 @@ class TRADER():
         fl.close()
 
     def run(self):
+        self.pair_info = 'Время сбора информации:\n%s\n' % time.ctime()
+        self.pair_info += 'Блок - %s\n' % self.flag
         try:
             if self.flag == STAGE.BUY:
                 self.logging('\n' + '=' * 30 + ' STAGE BUY ' + '=' * 30 + '\n')
-                return self.block_of_buy()
+                self.block_of_buy()
             elif self.flag == STAGE.WAIT_BUY:
                 self.logging('\n' + '=' * 30 + ' STAGE WAIT BUY ' + '=' * 30 + '\n')
-                return self.block_of_wait_buy()
+                self.block_of_wait_buy()
             elif self.flag == STAGE.SELL:
                 self.logging('\n' + '=' * 30 + ' STAGE WAIT PROFIT ' + '=' * 30 + '\n')
-                return self.block_of_sell()
+                self.block_of_sell()
             elif self.flag == STAGE.WAIT_SELL:
                 self.logging('\n' + '=' * 30 + ' STAGE WAIT SELL ' + '=' * 30 + '\n')
-                return self.block_of_wait_sell()
+                self.block_of_wait_sell()
             elif self.flag == STAGE.REPORT:
                 self.logging('\n' + '=' * 30 + ' STAGE REPORT ' + '=' * 30 + '\n')
                 print('\n' + time.ctime() + ' =' + ' STAGE REPORT '+ self.pair + ' =' + '\n')
-                return self.block_of_report()
+                self.block_of_report()
         except ErrorEnoughCash as ex:
             self.logging(ex)
         except timeout as ex:
@@ -144,6 +149,31 @@ class TRADER():
                 return
             self.logging(ex)
             raise
+        finally:
+            self.report_about_pair()
+            self.pair_info = None
+
+    def report_about_pair(self):
+        try:
+            traders = self.db.query(TRADE).all()
+
+            for trader in traders:
+                if trader.pair == self.pair and trader.token_name == self.account:
+                    trader.data = self.pair_info
+
+            self.db.commit()
+        except Exception as e:
+            self.logging(e)
+            print(e)
+
+    def report_about_sell(self):
+        try:
+            report = REPORT(0, 'Пара %s сделала полную продажу!' % self.pair)
+            self.db.add(report)
+            self.db.commit()
+        except Exception as e:
+            self.logging(e)
+            print(e)
 
     def block_of_buy(self):
         open_orders = self.api.get_open_orders()
@@ -161,8 +191,10 @@ class TRADER():
     def block_of_report(self):
         if self.is_end_trade:
             self.pair_is_complited = True
+            self.report_about_sell()
             return
         self.flag = STAGE.BUY
+        self.report_about_sell()
         return
 
     def is_open_orders(self, open_orders):
@@ -414,6 +446,8 @@ class TRADER():
         try:
             quantity_in_currency = float(self.__get_balances()[self.in_currency])
             last_important_purchases = self.get_important_orders_for_re_calc()
+            sell, buy = self.get_count_sell_and_buy(last_important_purchases)
+            self.pair_info += 'Всего ордеров сначала торгов - %s\nКоличество закупок - %s\nКоличество продаж - %s\n' % (len(last_important_purchases), buy, sell)
             amount = self.get_amount_for_sell(last_important_purchases)
             quantity = self.get_quantity_for_sell(quantity_in_currency, last_important_purchases)
             price_without_profit = self.__calc_price(amount, quantity, False)
@@ -422,6 +456,8 @@ class TRADER():
             price_difference = (current_price_of_sell/price_without_profit) * 100 - 100
             self.logging(u'Цена продажи - %s. Цена без профита (чтобы выйти в ноль) - %s. Цена с профитом - %s. Профит - %s.' % (current_price_of_sell, price_without_profit, price_with_profit, self.percent_of_profit))
             self.logging(u'Процент между ценой продажи из стакана и нашей средней цены продажи без профита - %s' % price_difference)
+            self.pair_info += u'Цена продажи - %s\nЦена без профита (чтобы выйти в ноль) - %s\nЦена с профитом - %s\nПрофит - %s\n' % (round(current_price_of_sell, 8), round(price_without_profit, 8), round(price_with_profit, 8), self.percent_of_profit)
+            self.pair_info += 'Текущий процент - (%s)\n' % round(price_difference, 3)
             if price_difference < - self.percent_of_additional_purchase:
                 self.logging(u'Условие закупа соблюдается.')
                 if amount < self.maximum_amount_for_buy:
