@@ -1,6 +1,6 @@
 import sys
 import http.client
-import urllib
+import urllib.error
 import json
 import hashlib
 import hmac

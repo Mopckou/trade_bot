@@ -65,7 +65,8 @@ class TRADER():
         'percent_of_profit': "Процент продажи.",
         'increase_cash_of_buy': "Параметр повышения суммы закупки.",
         'coeff_increase_of_cash': "Коэффициент увеличения суммы закупки.",
-        'is_end_trade': "Остановить пару после полной продажи."
+        'is_end_trade': "Остановить пару после полной продажи.",
+        'smoll_fraction': "Допустимое количество Сатоши сверху пересчитанной суммы."
     }
 
     def __init__(self, db=None, pair=None, api=None, account=None):
@@ -143,11 +144,18 @@ class TRADER():
             self.logging(u'Ошиюка SSL - %s' % ex)
             print('SSL ERROR')
         except Exception as ex:
+            self.logging(ex)
             if '40016' in ex.__str__():
                 self.logging(u'На сервере ведутся технические работы.')
                 time.sleep(420)
                 return
-            self.logging(ex)
+            if '50173' in ex.__str__():
+                self.logging(u'Не удалось найти ордер!')
+                self.logging(self.api.get_open_orders())
+                raise
+            if 'Error while parsing response' in ex.__str__():
+                self.logging(u'Ошибка парса сообщения от сервера биржы.')
+                return
             raise
         finally:
             self.report_about_pair()
@@ -166,9 +174,17 @@ class TRADER():
             self.logging(e)
             print(e)
 
-    def report_about_sell(self):
+    def report_about_sell(self, amount_spent, amount_received, profit):
+        amount_spent_str = 'Потрачено: %s(%s)' % (amount_spent, self.out_currency)
+        amount_received_str = 'Получено: %s(%s)' % (amount_received, self.out_currency)
+        profit_str = 'Выручка составила: %s(%s)' % (profit, self.out_currency)
         try:
-            report = REPORT(0, 'Пара %s сделала полную продажу!' % self.pair)
+            report = REPORT(
+                0,
+                'Пара %s (%s) сделала полную продажу!\n%s\n%s\n%s' % (
+                    self.pair, self.account, amount_spent_str, amount_received_str, profit_str
+                )
+            )
             self.db.add(report)
             self.db.commit()
         except Exception as e:
@@ -189,12 +205,16 @@ class TRADER():
             return
 
     def block_of_report(self):
+        amount_spent, amount_received, profit = self.calc_profit()
+        self.report_about_sell(
+            amount_spent,
+            amount_received,
+            profit
+        )
         if self.is_end_trade:
             self.pair_is_complited = True
-            self.report_about_sell()
             return
         self.flag = STAGE.BUY
-        self.report_about_sell()
         return
 
     def is_open_orders(self, open_orders):
@@ -254,39 +274,40 @@ class TRADER():
         price = float(first_order[0]) + SATOSHI - self.substracted_value_of_price
         price = round(price, 9)
         if self.increase_cash_of_buy:
-            amount = self.__get_new_amount_for_buy()
+            quantity = self.__get_new_quantity_of_buy()
         else:
-            amount = self.quantity_cash_of_buy
+            quantity = self.quantity_cash_of_buy
+        amount = price * quantity
+        self.logging('Количество - %s, обойдется в - %s (%s)' % (quantity, amount, self.out_currency))
         if self.is_currency_for_buy(amount):
-            self.last_order_id = self._create_order_of_buy(amount, price)
+            self.last_order_id = self._create_order_of_buy(quantity, price)
         else:
             if important:
                 raise ErrorEnoughCash('Недостаточно валюты для совершения покупки!')
 
-    def __get_new_amount_for_buy(self):
-        amounts = []
+    def __get_new_quantity_of_buy(self):
+        quantities = []
         last_orders = self.get_important_orders_for_re_calc()
         if not last_orders:
-            self.logging(u'Первая покупка по стандартной сумме - %s.' % self.quantity_cash_of_buy)
+            self.logging(u'Покупаем стандартное количество - %s.' % self.quantity_cash_of_buy)
             return self.quantity_cash_of_buy
         for order in last_orders:
             if order['type'] == 'sell':
                 continue
-            amounts.append(float(order['amount']))
-        amounts.sort()
-        amounts.reverse()
-        amount = amounts[0]
-        self.logging(u'Суммы что мы потратили на покупки (по убыванию) - %s' % amounts)
-        if amount < self.quantity_cash_of_buy:
-            self.logging(u'Наибольшая сумма которую потратили на покупку (%s), меньше суммы первой покупки (%s)' % (amount, self.quantity_cash_of_buy))
-            self.logging(u'Покупка по стандартной сумме - %s' % self.quantity_cash_of_buy)
+            quantities.append(float(order['quantity']))
+        quantities.sort()
+        quantities.reverse()
+        quantity = quantities[0]
+        self.logging(u'Количества валюты что мы купили (по убыванию) - %s' % quantities)
+        if quantity < self.quantity_cash_of_buy:
+            self.logging(u'Наибольшее количество которое было куплено (%s), меньше количества первой покупки (%s)' % (quantity, self.quantity_cash_of_buy))
+            self.logging(u'Покупка стандартного количества - %s' % self.quantity_cash_of_buy)
             return self.quantity_cash_of_buy
-        new_amount = amount * self.coeff_increase_of_cash
-        self.logging(u'Предыдущая наибольшая сумма покупки %s, новая сумма - %s' % (amount, new_amount))
-        return new_amount
+        new_quantity = round(quantity * self.coeff_increase_of_cash, 8)
+        self.logging(u'Предыдущее наибольшее купленное количество %s, новое количество - %s' % (quantity, new_quantity))
+        return new_quantity
 
-    def _create_order_of_buy(self, amount, price):
-        quantity = round(amount/price, 8)
+    def _create_order_of_buy(self, quantity, price):
         order_create_setup = {'pair': self.pair,
                               'quantity': quantity,
                               'price': price,
@@ -342,7 +363,6 @@ class TRADER():
         open_orders = self.api.get_open_orders()
         if self.order_is_purchased(open_orders):
             self.flag = STAGE.SELL
-            #self.last_order_id_of_buy = None
             self.count_order_trades = 0
             return
         if not self.order_is_first(open_orders[self.pair], 'bid'):
@@ -355,7 +375,7 @@ class TRADER():
             self.logging(u'wait buy is timeout! Flag = stage.buy')
             self.flag = STAGE.BUY
             self.cancel_all_open_orders(open_orders[self.pair])
-            self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
+            self.count_order_trades = 0# колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
     def block_of_wait_sell(self):
@@ -374,7 +394,7 @@ class TRADER():
             self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.SELL...')
             self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.SELL
-            self.count_order_trades = 0 # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
+            self.count_order_trades = 0# колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
     def order_is_first(self, open_orders, type):
@@ -445,20 +465,22 @@ class TRADER():
     def block_of_sell(self):
         try:
             quantity_in_currency = float(self.__get_balances()[self.in_currency])
-            last_important_purchases = self.get_important_orders_for_re_calc()
-            sell, buy = self.get_count_sell_and_buy(last_important_purchases)
-            self.pair_info += 'Всего ордеров сначала торгов - %s\nКоличество закупок - %s\nКоличество продаж - %s\n' % (len(last_important_purchases), buy, sell)
-            amount = self.get_amount_for_sell(last_important_purchases)
-            quantity = self.get_quantity_for_sell(quantity_in_currency, last_important_purchases)
+            self.last_important_purchases = self.get_important_orders_for_re_calc()
+            sell, buy = self.get_count_sell_and_buy(self.last_important_purchases)
+            self.pair_info += 'Всего ордеров сначала торгов - %s\nКоличество закупок - %s\nКоличество продаж - %s\n' % (len(self.last_important_purchases), buy, sell)
+            amount = self.get_amount_for_sell(self.last_important_purchases)
+            quantity = self.get_quantity_for_sell(quantity_in_currency, self.last_important_purchases)
             price_without_profit = self.__calc_price(amount, quantity, False)
             price_with_profit = self.__calc_price(amount, quantity, True)
             current_price_of_sell = float(self.get_first_order_of_sell()[0])
-            price_difference = (current_price_of_sell/price_without_profit) * 100 - 100
+            current_percent = (current_price_of_sell/price_without_profit) * 100 - 100
             self.logging(u'Цена продажи - %s. Цена без профита (чтобы выйти в ноль) - %s. Цена с профитом - %s. Профит - %s.' % (current_price_of_sell, price_without_profit, price_with_profit, self.percent_of_profit))
-            self.logging(u'Процент между ценой продажи из стакана и нашей средней цены продажи без профита - %s' % price_difference)
+            self.logging(u'Процент между ценой продажи из стакана и нашей средней цены продажи без профита - %s' % current_percent)
+            self.pair_info += 'Потратили - %s (%s)\n' % (self.__get_spent_amount(self.last_important_purchases), self.out_currency)
             self.pair_info += u'Цена продажи - %s\nЦена без профита (чтобы выйти в ноль) - %s\nЦена с профитом - %s\nПрофит - %s\n' % (round(current_price_of_sell, 8), round(price_without_profit, 8), round(price_with_profit, 8), self.percent_of_profit)
-            self.pair_info += 'Текущий процент - (%s)\n' % round(price_difference, 3)
-            if price_difference < - self.percent_of_additional_purchase:
+            self.pair_info += 'Текущий процент - (%s)\n' % round(current_percent, 3)
+            self.pair_info += 'Предполагаемый процент после закупа - %s' % round(self.get_future_percent(amount, quantity, current_price_of_sell), 9)
+            if current_percent < - self.percent_of_additional_purchase:
                 self.logging(u'Условие закупа соблюдается.')
                 if amount < self.maximum_amount_for_buy:
                     print('ЗАКУП - %s!' % self.pair)
@@ -509,21 +531,20 @@ class TRADER():
         cash_in_currency = float(self.__get_balances()[self.in_currency])
         self.logging(u'Количество валюты на счету %s (%s)' % (cash_in_currency, self.in_currency))
         important_orders = []
-        if self.__equal(cash_in_currency):
+        if cash_in_currency == self.minimum_cash_in_currency:
             self.logging(u'Покупки еще не совершались.')
             return []
         for order in last_orders:
             important_orders.append(order)
             if order['type'] == 'sell':
-                cash_in_currency += float(order['quantity'])# + (float(order['quantity']) * self.percent_of_burse)
+                cash_in_currency += float(order['quantity'])
             elif order['type'] == 'buy':
                 buy_quantity = float(order['quantity'])
                 cash_in_currency -= buy_quantity - (buy_quantity * self.percent_of_burse)
-                #cash_in_currency = round(cash_in_currency, 9)
             self.logging('cash %s' % cash_in_currency)
             self.logging('cash round %s' % round(cash_in_currency, 9))
             self.logging(self.__equal(cash_in_currency))
-            if self.__equal(cash_in_currency):
+            if self.__equal(round(cash_in_currency, 9)):
                 sell, buy = self.get_count_sell_and_buy(important_orders)
                 self.logging(u'Пследние ордера покупок (количество закупок - %s, количество продаж - %s) - %s' % (buy, sell, len(important_orders)))
                 return important_orders
@@ -538,6 +559,14 @@ class TRADER():
             elif order['type'] == 'buy':
                 buy += 1
         return sell, buy
+
+    def __get_spent_amount(self, last_orders):
+        amount = 0.
+        for order in last_orders:
+            if order['type'] == 'sell':
+                continue
+            amount += float(order['amount'])
+        return round(amount, 8)
 
     def __equal(self, other):
         difference = other - self.minimum_cash_in_currency
@@ -562,7 +591,7 @@ class TRADER():
         return quantity_for_sell
 
     def __calc_price(self, amount, quantity, is_profit):
-        amount += amount * self.percent_of_burse # прибавляем 0.2%, чтобы посчитать цену с учетом комиссии
+        amount += amount * self.percent_of_burse# прибавляем 0.2%, чтобы посчитать цену с учетом комиссии
         if is_profit:
             amount += amount * self.percent_of_profit / 100
         price = amount / quantity
@@ -570,6 +599,52 @@ class TRADER():
             quantity, price, self.percent_of_burse, is_profit
         ))
         return price
+
+    def calc_profit(self):
+        first_purchase = self.last_important_purchases[-1]['order_id']
+        self.logging('Номер ордера первой покупки: %s' % first_purchase)
+        last_orders = self.get_orders_before_first_purchase(first_purchase)
+        self.logging('last orders: %s' % last_orders)
+        amount_spent = round(self.get_amount_spent(last_orders), 9)
+        amount_received = round(self.get_amount_received(last_orders), 9)
+        profit = round(amount_received - amount_spent, 9)
+        self.logging('Потрачено: %s, получено: %s, профит: %s' % (amount_spent, amount_received, profit))
+        return amount_spent, amount_received, profit
+
+    def get_orders_before_first_purchase(self, order_id):
+        order_list = []
+        orders = self.api.user_trades(self.pair)[self.pair]
+        self.logging('user trades: %s' % orders)
+        for order in orders:
+            order_list.append(order)
+            if order['order_id'] == order_id:
+                return order_list
+        raise Exception('Error find first order.')
+
+    def get_amount_received(self, last_orders):
+        amount_summ = 0.
+        for order in last_orders:
+            if order['type'] == 'buy':
+                continue
+            amount = float(order['amount'])
+            amount_summ += amount - amount * self.percent_of_burse
+        return amount_summ
+
+    def get_amount_spent(self, last_orders):
+        amount_summ = 0.
+        for order in last_orders:
+            if order['type'] == 'sell':
+                continue
+            amount_summ += float(order['amount'])
+        return amount_summ
+
+    def get_future_percent(self, amount, quantity, current_price_of_sell):
+        new_quantity = self.__get_new_quantity_of_buy()
+        new_quantity += new_quantity - new_quantity * self.percent_of_burse
+        amount += new_quantity * current_price_of_sell
+        quantity += new_quantity
+        price = self.__calc_price(amount, quantity, False)
+        return (current_price_of_sell/price) * 100 - 100
 
     def __get_amount_by_last_orders(self, orders):
         amount = 0.
@@ -590,19 +665,7 @@ class TRADER():
                 quantity -= float(order['quantity'])
             elif order['type'] == 'buy':
                 buy_quantity = float(order['quantity'])
-                quantity += buy_quantity - (buy_quantity * self.percent_of_burse) # с вычетом процента комиссии
-                quantity = round(quantity, 8)
-        self.logging(u'Сумма валюты что мы купили за последние ордера (котрую нужно реализовать) - %s' % quantity)
+                quantity += buy_quantity - (buy_quantity * self.percent_of_burse)#с вычетом процента комиссии
+        quantity = round(quantity, 8)
+        self.logging(u'Количество валюты что мы купили за последние ордера (котрую нужно реализовать) - %s' % quantity)
         return quantity
-
-    # def get_last_purchases(self):
-    #     user_trades = self.api.user_trades(self.pair)[self.pair]
-    #     self.logging(u'user trades - %s' % user_trades)
-    #     last_purchases = []
-    #     for user_trade in user_trades:
-    #         if user_trade['type'] == 'sell': # цикл до первой продажи, для выделения массива последних покупок
-    #             self.logging(u'Пследние ордера покупок (количество - %s) - %s' % (len(last_purchases), last_purchases))
-    #             return last_purchases
-    #         last_purchases.append(user_trade)
-    #     self.logging(u'Пследние ордера покупок (количество - %s) - %s' % (len(last_purchases), last_purchases))
-    #     return last_purchases

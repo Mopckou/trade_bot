@@ -2,6 +2,7 @@ import os
 import errno
 import json
 import time
+import binascii
 from src.trader import LOG_DIRECTORY
 from src.trader import TRADER
 from src.dbase import TOKEN, TASK, REPORT, TRADE, DISPATCH, ARCHIVE
@@ -1252,7 +1253,8 @@ class TBot:
                         '/edit': EDIT,
                         '/return': RETURN,
                         '/sub': SUBSCRIPTION,
-                        '/info': INFO}
+                        '/info': INFO,
+                        '/photo': None}
 
     ans = "Поддерживаемые команды:\n\n\n" \
           "/info - информация по парам\n\n" \
@@ -1277,6 +1279,26 @@ class TBot:
     def send_msg(self, chat_id, txt):
         txt = quote_plus(txt)
         self.browser.get('https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s' % (self.token, chat_id, txt))
+        js = self.__get_json_obj()
+        if not js['ok']:
+            print(js['error_code'], js['description'])
+            raise Exception('Error - %s' % js['error_code'])
+        return js
+
+    def send_image(self, chat_id, image_path):
+        files = {'photo': open(image_path, 'rb')}
+        # from requests_toolbelt import MultipartEncoder
+        # multipart_data = MultipartEncoder(
+        #     fields={
+        #         # a file upload field
+        #         'file': ('file.py', open(image_path, 'rb'), 'text/plain')
+        #     }
+        # )
+
+        # print(multipart_data.boundary)
+        from urllib import parse
+        data = parse.urlencode(files)
+        self.browser.get('https://api.telegram.org/bot%s/sendPhoto?chat_id=%s&%s' % (self.token, chat_id, data))
         js = self.__get_json_obj()
         if not js['ok']:
             print(js['error_code'], js['description'])
@@ -1319,8 +1341,8 @@ class TBot:
             self.send_msg(d.user_id, data)
 
     def run(self):
-        try:
-            while 1:
+        while 1:
+            try:
                 upd = self.get_updates(self.offset)
                 print(len(upd['result']))
                 for update in upd['result']:
@@ -1331,6 +1353,8 @@ class TBot:
                     txt = update['message']['text']
                     chat_id = update['message']['chat']['id']
                     if txt in self.special_commands:
+                        if txt == '/photo':
+                            continue#self.send_image(chat_id, r'C:\Users\a.ermakov\Desktop\Figure_1.png')
                         if chat_id in self.active_of_session:
                             self.active_of_session.pop(chat_id)
                             self.send_msg(chat_id, 'Предыдущая сессия завершена.')
@@ -1349,13 +1373,12 @@ class TBot:
                 self.clear_session_of_done()
                 self.send_message_to_all()
                 time.sleep(1)
-        except NoSuchElementException:
-            print('Ошибка получения элемента страницы.')
-        except TimeoutException:
-            print('TIMEOUT!')
-        except Exception as ex:
-            print(ex)
-            if ex == 'Error - 502':
-                print(u'Ошибка 502.')
-            else:
-                raise
+            except NoSuchElementException:
+                print('Ошибка получения элемента страницы.')
+            except TimeoutException:
+                print('TIMEOUT!')
+            except Exception as ex:
+                if 'Error - 502' in ex.__str__():
+                    print(u'Ошибка 502.')
+                else:
+                    raise
