@@ -32,3 +32,4 @@ src/__pycache__/trader.cpython-36.pyc
 src/operadriver_win64/operadriver.exe
 src/operadriver_win64/sha512_sum
 src/OT_TESTS.db
+.idea/workspace.xml

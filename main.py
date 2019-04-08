@@ -177,7 +177,8 @@ class TRADER_CONTROL:
         except Exception as e:
             print(e)
 
-    def update_params(self, new_trader, params):
+    @staticmethod
+    def update_params(new_trader, params):
         for param in params:
             if new_trader.__getattribute__(param) != params[param]:
                 new_trader.__setattr__(param, params[param])
@@ -239,10 +240,11 @@ class TRADER_CONTROL:
                 if trader.pair_is_complited:
                     self.put_trader_in_archive(trader, None)
 
+
 NAME = 'TRADE_DATA_BASE.db'
 DATABASE = os.path.abspath(
     os.path.join(
-        os.path.split(__file__)[0], 'db', NAME
+        os.path.split(__file__)[0], 'src', 'db', NAME
     )
 )
 
@@ -252,6 +254,3 @@ session = Session()
 
 controller = TRADER_CONTROL(session)
 controller.run()
-
-if __name__ == '__main__':
-    pass
