@@ -35,20 +35,20 @@ class STAGE:
     REPORT = 4
 
 
-class TRADER():
+class TRADER:
     flag = STAGE.BUY
-    minimum_cash_in_currency = 0. # колличество валюты в паре (например в BTC) при котором считаем что надо завержить сделку и переходим в блок stage.sell
-    quantity_cash_of_buy = 0. # колличество валюты которые мы хотим потратить на покупку например BTC. (обязательный параметр)
-    substracted_value_of_price = 0. # колличество валюты которые мы отнимает от цены в оредере (необзательный параметр)
+    minimum_cash_in_currency = 0.  # колличество валюты в паре (например в BTC) при котором считаем что надо завержить сделку и переходим в блок stage.sell
+    quantity_cash_of_buy = 0.  # колличество валюты которые мы хотим потратить на покупку например BTC. (обязательный параметр)
+    substracted_value_of_price = 0.  # колличество валюты которые мы отнимает от цены в оредере (необзательный параметр)
     flag_check_partial_purchase = True # флаг анализировать ли частичную покупку оредера (необязательный параметр)
-    count_order_trades = 0 # колличество сделок по ордеру
+    count_order_trades = 0  # колличество сделок по ордеру
     stop_timeout_of_waiting = 900 # время ожидания покупки ордера (необязательный параметр)
-    percent_of_burse = 0.002 # комиссия биржы
-    percent_of_additional_purchase = 1 #процент, при котором осуществляется дополнительная закупка
-    maximum_amount_for_buy = 20 #максимльное количество денег на которое можно закупаться
-    percent_of_profit = 1 #процент при котором продаем валюту
-    increase_cash_of_buy = True # флаг повышать ли цену покупки при каждом закупе
-    coeff_increase_of_cash = 2. # коэффициент увеличения цены при каждом закупе
+    percent_of_burse = 0.002  # комиссия биржы
+    percent_of_additional_purchase = 1  # процент, при котором осуществляется дополнительная закупка
+    maximum_amount_for_buy = 20  # максимльное количество денег на которое можно закупаться
+    percent_of_profit = 1  # процент при котором продаем валюту
+    increase_cash_of_buy = True  # флаг повышать ли цену покупки при каждом закупе
+    coeff_increase_of_cash = 2.  # коэффициент увеличения цены при каждом закупе
     is_end_trade = False
     pair_is_complited = False
     smoll_fraction = 15
@@ -56,7 +56,7 @@ class TRADER():
     params = {
         'minimum_cash_in_currency': "Несгораемая сумма на счету.",
         'quantity_cash_of_buy': "Закупочная сумма.",
-        'substracted_value_of_price': "Нет информации",
+        'substracted_value_of_price': "Нет информации.",
         'flag_check_partial_purchase': "Проверка частичной покупки.",
         'stop_timeout_of_waiting': "Таймаут ожидания покупки/продажи ордера. (сек)",
         'percent_of_burse': "Комиссия биржы.",

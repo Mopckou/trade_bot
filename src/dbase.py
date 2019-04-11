@@ -74,6 +74,7 @@ def create_bd(engine):
 # Функция declarative_base создаёт базовый класс для декларативной работы
 Base = declarative_base()
 
+
 class REPORTS(Base):
     __tablename__ = 'Reports'
     id = Column(Integer, primary_key=True)
@@ -94,6 +95,7 @@ class REPORTS(Base):
         return "<REPORTS(task_id - '%s', status -'%s', script - '%s', data - '%s', is_done - '%s')>" % \
                      (self.task_id, self.status, self.script, self.data, self.is_done)
 
+
 class ERROR(Base):
     __tablename__ = 'Error'
     id = Column(Integer, primary_key=True)
@@ -108,7 +110,7 @@ class ERROR(Base):
         return "<ERROR(data - '%s', is_done -'%s')>" % \
                (self.data, self.is_done)
 
-# На основании базового класса можно создавать необходимые классы
+
 class TRADE(Base):
     __tablename__ = 'TRADE'
     id = Column(Integer, primary_key=True)
@@ -189,6 +191,7 @@ class REPORT(Base):
     def __repr__(self):
         return "<Report('%s','%s')>" % \
                (self.user_id, self.data)
+
 
 class DISPATCH(Base):
     __tablename__ = 'Dispatch'

@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import time
 
+
 class ExmoAPI:
     def __init__(self, API_KEY, API_SECRET, API_URL = 'api.exmo.com', API_VERSION = 'v1'):
         self.API_URL = API_URL

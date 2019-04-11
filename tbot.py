@@ -1,9 +1,10 @@
 import os
-from src.data_base import TBot
+from src.telegram_bot import TBot
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from selenium import webdriver
 from src.config import token
+from selenium.common.exceptions import TimeoutException
 
 NAME = 'TRADE_DATA_BASE.db'
 DATABASE = os.path.abspath(
@@ -19,11 +20,24 @@ options = webdriver.ChromeOptions()
 options.add_argument(r'--user-data-dir=%s' % opera_settings)
 options.binary_location = binary_loc
 
-driver = webdriver.Chrome(executable_path=chrome_driver_loc, chrome_options=options)
 
-engine = create_engine('sqlite:///%s' % DATABASE, echo=False)
-Session = sessionmaker(bind=engine)
-session = Session()
+def main():
+    while 1:
+        driver = webdriver.Chrome(executable_path=chrome_driver_loc, chrome_options=options)
 
-bot = TBot(driver, token, session)
-bot.run()
+        engine = create_engine('sqlite:///%s' % DATABASE, echo=False)
+        sm = sessionmaker(bind=engine)
+        session = sm()
+
+        try:
+            bot = TBot(driver, token, session)
+            bot.run()
+        except TimeoutException:
+            print('Перезапуск драйвера!')
+            driver.quit()
+        except Exception:
+            raise
+
+
+if __name__ == '__main__':
+    main()

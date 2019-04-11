@@ -2,16 +2,14 @@ import os
 import errno
 import json
 import time
-import binascii
 from src.trader import LOG_DIRECTORY
 from src.trader import TRADER
-from src.dbase import TOKEN, TASK, REPORT, TRADE, DISPATCH, ARCHIVE
+from src.dbase import TOKEN, TASK, TRADE, DISPATCH, ARCHIVE
 from src.burse import Exmo
-from urllib.parse import quote_plus
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 
 TGBot = 'TBot'
+
 
 class SESSION:
     __session_is_done = False
@@ -20,7 +18,6 @@ class SESSION:
     def __init__(self, chat_id, send_message):
         self.chat_id = chat_id
         self.send = send_message
-
 
     def put_next_step(self, func):
         self.next_func = func
@@ -72,9 +69,9 @@ class SESSION:
     def is_timeouted(self):
         return time.time() - self.time > self.timeout
 
-    def send_msg(self, txt):
+    def send_msg(self, txt, data=None, parse_mode=None):
         self.logging(txt)
-        return self.send(self.chat_id, txt)
+        return self.send(self.chat_id, txt, data, parse_mode)
 
 
 class NEW(SESSION):
@@ -95,7 +92,11 @@ class NEW(SESSION):
 
         self.tokens = None
         self.create_log_file(self.chat_id)
-
+        self.keyboard = {
+            'keyboard': None,
+            'resize_keyboard': True,
+            'one_time_keyboard': True
+        }
 
     def show_menu(self):
         if self.burse_is_confirmed():
@@ -115,11 +116,20 @@ class NEW(SESSION):
                '3. Настройки пары\n' \
                '4. Подтверждение создания пары\n' \
                '\n' \
-               '0. Выход.' \
+               '0. Выход' \
                '' % (burse, pair)
         return menu
 
-    def show_menu_burse(self):
+    def get_buttons_menu(self):
+        self.keyboard['keyboard'] = [['Биржа'],
+                                     ['Пара'],
+                                     ['Настройки пары'],
+                                     ['Подтверждение создания пары'],
+                                     ['Выход']]
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
+
+    def show_menu_of_burse(self):
         burse = self.__get_user_burse()
         token = self.__get_user_token_name()
         menu = 'Меню настройки биржы.\n' \
@@ -133,11 +143,19 @@ class NEW(SESSION):
                '' % (burse, token)
         return menu
 
-    def show_menu_token(self):
+    def get_buttons_menu_of_burse(self):
+        self.keyboard['keyboard'] = [['Выбор биржы'],
+                                     ['Настройки токена биржы'],
+                                     ['Подтвердить ввод настроек'],
+                                     ['Назад']]
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
+
+    def show_menu_of_token(self):
         user_token = self.__get_user_token_name()
         menu = 'Меню ввода токена.\n' \
                '\n' \
-               'Выберите номер:\n' \
+               'Выберите пункт меню:\n' \
                '1. Выбор токена - (%s)\n' \
                '2. Ввод нового токена\n' \
                '3. Удаление токена\n' \
@@ -146,7 +164,15 @@ class NEW(SESSION):
                '' % (user_token)
         return menu
 
-    def show_menu_params(self):
+    def get_buttons_menu_of_token(self):
+        self.keyboard['keyboard'] = [['Выбор токена'],
+                                     ['Ввод нового токена'],
+                                     ['Удаление токена'],
+                                     ['Назад']]
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
+
+    def show_menu_of_params(self):
         params = self.trader.params
         menu = 'Выберите нужный параметр:'
         for num, param in enumerate(params, 1):
@@ -156,7 +182,19 @@ class NEW(SESSION):
                 '0. Назад'
         return menu
 
-    def show_menu_change_param(self):
+    def get_button_menu_of_params(self):
+        self.keyboard['keyboard'] = []
+        params = self.trader.params
+
+        for num, param in enumerate(params, 1):
+            self.keyboard['keyboard'].append(
+                [str(num)]
+            )
+        self.keyboard['keyboard'].append(['Назад'])
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
+
+    def show_menu_of_change_param(self):
         info_param = self.trader.params[self.change_param]
         value = self.trader.__getattribute__(self.change_param)
         menu = 'Описание параметра: \n' \
@@ -165,11 +203,17 @@ class NEW(SESSION):
                'Выберите номер:\n' \
                '1. Ввод параметра (%s)\n' \
                '\n' \
-               '0. Назад.' \
+               '0. Назад' \
                '' % (info_param, value)
         return menu
 
-    def show_menu_accept(self):
+    def get_buttons_menu_of_change_params(self):
+        self.keyboard['keyboard'] = [['Ввод параметра'],
+                                     ['Назад']]
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
+
+    def show_menu_of_confirmation(self):
         menu = 'Вы уверены, что хотите создать новую пару? \n' \
                '\n' \
                'Выберите номер:\n' \
@@ -178,38 +222,48 @@ class NEW(SESSION):
 
         return menu
 
+    def get_buttons_menu_of_confirmation(self):
+        self.keyboard['keyboard'] = [['Да'], ['Нет']]
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
+
+    def remove_buttons(self):
+        remove_key_board = {'remove_keyboard': True}
+        sdata = 'reply_markup=%s' % json.dumps(remove_key_board)
+        return sdata
+
     def put_item_menu(self, txt):
-        if txt not in ['0', '1', '2', '3', '4']:
-            self.send_msg('Не корректный номер. Повторите ввод.')
+        if txt not in ['Выход', 'Биржа', 'Пара', 'Настройки пары', 'Подтверждение создания пары']:
+            self.send_msg('Не корректный пункт. Повторите ввод.')
             return
-        if txt == '0':
+        if txt == 'Выход':
             self.put_session_complited()
-            self.send_msg('Выход из сессии.')
+            self.send_msg('Выход из сессии.', self.remove_buttons())
             return
-        elif txt == '1':
+        elif txt == 'Биржа':
             self.put_next_step(self.put_item_menu_burse)
-            self.send_msg(self.show_menu_burse())
+            self.send_msg(self.show_menu_of_burse(), self.get_buttons_menu_of_burse())
             return
-        elif txt == '2':
+        elif txt == 'Пара':
             if not self.burse_is_confirmed():
                 self.send_msg('Введите сначала биржу!')
                 return
             self.put_next_step(self.put_pair)
-            self.send_msg('Введите пару!')
+            self.send_msg('Введите пару!', self.remove_buttons())
             return
-        elif txt == '3':
+        elif txt == 'Настройки пары':
             if not self.burse_is_confirmed() or not self.pair_is_confirmed():
                self.send_msg('Введите сначада пару!')
                return
             self.put_next_step(self.put_item_menu_param)
-            self.send_msg(self.show_menu_params())
+            self.send_msg(self.show_menu_of_params(), self.get_button_menu_of_params())
             return
-        elif txt == '4':
+        elif txt == 'Подтверждение создания пары':
             if not self.burse_is_confirmed() or not self.pair_is_confirmed():
                 self.send_msg('Введите сначала биржу и пару!')
                 return
-            self.put_next_step(self.put_item_menu_accept)
-            self.send_msg(self.show_menu_accept())
+            self.put_next_step(self.put_item_menu_of_confirmation)
+            self.send_msg(self.show_menu_of_confirmation(), self.get_buttons_menu_of_confirmation())
             return
 
     def put_param(self, txt):
@@ -223,7 +277,7 @@ class NEW(SESSION):
             self.trader.__setattr__(self.change_param, value)
             self.put_next_step(self.put_item_menu_param)
             self.send_msg('Параметр введен!')
-            self.send_msg(self.show_menu_params())
+            self.send_msg(self.show_menu_of_params(), self.get_button_menu_of_params())
             self.change_param = None
 
     def get_format_param(self, txt):
@@ -254,26 +308,26 @@ class NEW(SESSION):
             raise Exception('Not bool')
 
     def put_item_menu_burse(self, txt):
-        if txt not in ['0', '1', '2', '3']:
-            self.send_msg('Не корректный номер. Повторите ввод.')
+        if txt not in ['Назад', 'Выбор биржы', 'Настройки токена биржы', 'Подтвердить ввод настроек']:
+            self.send_msg('Не корректный пункт. Повторите ввод.')
             return
-        if txt == '0':
+        if txt == 'Назад':
             self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
             return
-        elif txt == '1':
+        elif txt == 'Выбор биржы':
             self.put_next_step(self.put_burse)
             self.__burse_confirmed = False
             self.__pair_confirmed = False
-            self.send_msg('Выберите биржу из списка: \n%s' % self.show_burse())
+            self.send_msg('Выберите биржу из списка: \n%s' % self.show_burse(), self.get_buttons_of_burse())
             return
-        elif txt == '2':
+        elif txt == 'Настройки токена биржы':
             self.put_next_step(self.put_item_menu_token)
             self.__burse_confirmed = False
             self.__pair_confirmed = False
-            self.send_msg(self.show_menu_token())
+            self.send_msg(self.show_menu_of_token(), self.get_buttons_menu_of_token())
             return
-        elif txt == '3':
+        elif txt == 'Подтвердить ввод настроек':
             result = self.accept_setup_burse()
             if not result:
                 self.send_msg('Настройки введены неверно! Повторите ввод.')
@@ -282,69 +336,70 @@ class NEW(SESSION):
             self.send_msg('Биржа успешно введена!')
             self.put_next_step(self.put_item_menu)
             self.__burse_confirmed = True
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
             return
 
     def put_item_menu_token(self, txt):
-        if txt not in ['0', '1', '2', '3']:
+        if txt not in ['Назад', 'Выбор токена', 'Ввод нового токена', 'Удаление токена']:
             self.send_msg('Не корректный номер. Повторите ввод.')
             return
-        if txt == '0':
+        if txt == 'Назад':
             self.put_next_step(self.put_item_menu_burse)
-            self.send_msg(self.show_menu_burse())
+            self.send_msg(self.show_menu_of_burse(), self.get_buttons_menu_of_burse())
             return
-        elif txt == '1':
+        elif txt == 'Выбор токена':
             self.put_next_step(self.put_token)
             self.__burse_confirmed = False
-            self.send_msg('Выберите токен из списка: \n%s' % self.show_tokens_by_name())
+            self.send_msg('Выберите токен из списка: \n%s' % self.show_tokens_by_name(), self.get_buttons_of_tokens())
             return
-        elif txt == '2':
+        elif txt == 'Ввод нового токена':
             self.put_next_step(self.put_new_token)
             self.__burse_confirmed = False
-            self.send_msg('Введите имя токена (по нему осуществлется выбор токена)!')
+            self.send_msg('Введите имя токена (по нему осуществлется выбор токена)!', self.remove_buttons())
             return
-        elif txt == '3':
+        elif txt == 'Удаление токена':
             self.put_next_step(self.del_token)
             self.__burse_confirmed = False
-            self.send_msg('Выберите токен из списка: \n%s' % self.show_tokens_by_name())
+            self.send_msg('Выберите токен из списка: \n%s' % self.show_tokens_by_name(), self.get_buttons_of_tokens())
             return
 
-    def put_item_menu_accept(self, txt):
-        if txt not in ['0', '1']:
+    def put_item_menu_of_confirmation(self, txt):
+        if txt not in ['Нет', 'Да']:
             self.send_msg('Не корректный номер. Повторите ввод.')
             return
-        if txt == '0':
+        if txt == 'Нет':
             self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
             return
-        elif txt == '1':
+        elif txt == 'Да':
             result, task_id = self.create_task()
             if not result:
                 self.send_msg('Ошибка. Новая пара не зарегистрирована!')
                 self.put_next_step(self.put_item_menu)
-                self.send_msg(self.show_menu())
+                self.send_msg(self.show_menu(), self.get_buttons_menu())
                 return
-            self.send_msg('Новая пара зарегистрирована. \nОжидайте сообщение о начале работы новой пары. \n\nЗадание номер - %s.' % task_id)
+            self.send_msg('Новая пара зарегистрирована. '
+                          '\nОжидайте сообщение о начале работы новой пары. '
+                          '\n\nЗадание номер - %s.' % task_id, self.remove_buttons())
             self.put_session_complited()
             return
 
-
     def del_token(self, txt):
-        token_by_num = self.__get_tokens_by_name()
-        if txt == '0':
+        tokens = self.__get_tokens_by_num().values()
+        if txt == 'Назад':
             self.put_next_step(self.put_item_menu_token)
-            self.send_msg(self.show_menu_token())
+            self.send_msg(self.show_menu_of_token(), self.get_buttons_menu_of_token())
             return
-        if txt not in token_by_num:
+        if txt not in tokens:
             self.send_msg('Некорректное значние! Повторите ввод!')
             return
-        result = self.__del_token(token_by_num[txt])
+        result = self.__del_token(txt)
         if not result:
             self.send_msg('Ошибка. Токен не удален!')
         else:
             self.send_msg('Токен удален!')
         self.put_next_step(self.put_item_menu_token)
-        self.send_msg(self.show_menu_token())
+        self.send_msg(self.show_menu_of_token(), self.get_buttons_menu_of_token())
 
     def __del_token(self, token_name):
         tokens = self.__get_tokens()
@@ -360,16 +415,16 @@ class NEW(SESSION):
             return True
 
     def put_menu_change_param(self, txt):
-        if txt not in ['0', '1']:
+        if txt not in ['Назад', 'Ввод параметра']:
             self.send_msg('Не корректный номер. Повторите ввод.')
             return
-        if txt == '0':
+        if txt == 'Назад':
             self.put_next_step(self.put_item_menu_param)
-            self.send_msg(self.show_menu_params())
+            self.send_msg(self.show_menu_of_params(), self.get_button_menu_of_params())
             return
-        elif txt == '1':
+        elif txt == 'Ввод параметра':
             self.put_next_step(self.put_param)
-            self.send_msg('Введите значение параметра.')
+            self.send_msg('Введите значение параметра.', self.remove_buttons())
             return
 
     def put_new_token(self, txt):
@@ -384,9 +439,9 @@ class NEW(SESSION):
 
     def put_item_menu_param(self, txt):
         params = self.trader.params
-        if txt == '0':
+        if txt == 'Назад':
             self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
             return
         try:
             int(txt)
@@ -398,7 +453,7 @@ class NEW(SESSION):
                 self.send_msg('Параметр выбран!')
                 self.put_next_step(self.put_menu_change_param)
                 self.change_param = param
-                self.send_msg(self.show_menu_change_param())
+                self.send_msg(self.show_menu_of_change_param(), self.get_buttons_menu_of_change_params())
                 return
         self.send_msg('Неверный номер параметра!')
 
@@ -417,12 +472,12 @@ class NEW(SESSION):
         if not result:
             self.put_next_step(self.put_item_menu_token)
             self.send_msg('Ошибка создания токена!')
-            self.send_msg(self.show_menu_token())
+            self.send_msg(self.show_menu_of_token(), self.get_buttons_menu_of_token())
             return
         self.send_msg('Токен успешно создан!')
         self.put_next_step(self.put_item_menu_token)
         self.send_msg('Выберите новый токен!')
-        self.send_msg(self.show_menu_token())
+        self.send_msg(self.show_menu_of_token(), self.get_buttons_menu_of_token())
 
     def set_new_token(self, name, data):
         data = json.dumps(data)
@@ -437,11 +492,26 @@ class NEW(SESSION):
 
     def show_tokens_by_name(self):
         str = ''
-        tokens = self.__get_tokens_by_name()
+        tokens = self.__get_tokens_by_num()
+
         for token in tokens:
             str += "%s - %s\n" % (token, tokens[token])
+
         str += '\n 0. Назад'
         return str
+
+    def get_buttons_of_tokens(self):
+        self.keyboard['keyboard'] = []
+
+        tokens = self.__get_tokens_by_num()
+
+        for num, param in tokens.items():
+            self.keyboard['keyboard'].append(
+                [param]
+            )
+        self.keyboard['keyboard'].append(['Назад'])
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
 
     @property
     def token_list(self):
@@ -455,15 +525,15 @@ class NEW(SESSION):
             )
         return tokens
 
-    def __get_tokens_by_name(self):
-        tokens_by_name = {}
+    def __get_tokens_by_num(self):
+        tokens_by_num = {}
         token_list = self.token_list
-        for num, token in enumerate(token_list, 1):
-            print(num, token)
-            tokens_by_name.update(
-                {'%s' % num: token}
+        for num, token_name in enumerate(token_list, 1):
+            print(num, token_name)
+            tokens_by_num.update(
+                {'%s' % num: token_name}
             )
-        return tokens_by_name
+        return tokens_by_num
 
     def __get_burse_by_num(self):
         burse = {}
@@ -480,13 +550,24 @@ class NEW(SESSION):
         if txt == '/new':
             self.put_next_step(self.put_item_menu)
             #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
 
     def show_burse(self):
         burse = ''
         for num, element in enumerate(self.burse_list, 1):
             burse += '%s - %s\n' % (num, element)
         return burse
+
+    def get_buttons_of_burse(self):
+        self.keyboard['keyboard'] = []
+
+        for num, param in enumerate(self.burse_list, 1):
+            self.keyboard['keyboard'].append(
+                [param]
+            )
+        #self.keyboard['keyboard'].append(['Назад'])
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
 
     def __get_user_burse(self):
         if self.user_burse is None:
@@ -507,29 +588,29 @@ class NEW(SESSION):
             return self.user_token
 
     def put_burse(self, txt):
-        burse = self.__get_burse_by_num()
+        burse = self.__get_burse_by_num().values()
         if txt not in burse:
             self.send_msg('Неверная биржа! Повторите ввод!')
             return
-        self.user_burse = burse.get(txt)
+        self.user_burse = txt
         self.send_msg('Биржа введена!')
 
         self.put_next_step(self.put_item_menu_burse)
-        self.send_msg(self.show_menu_burse())
+        self.send_msg(self.show_menu_of_burse(), self.get_buttons_menu_of_burse())
 
     def put_token(self, txt):
-        token_by_num = self.__get_tokens_by_name()
-        if txt == '0':
+        tokens = self.__get_tokens_by_num().values()
+        if txt == 'Назад':
             self.put_next_step(self.put_item_menu_token)
-            self.send_msg(self.show_menu_token())
+            self.send_msg(self.show_menu_of_token(), self.get_buttons_menu_of_token())
             return
-        if txt not in token_by_num:
+        if txt not in tokens:
             self.send_msg('Некорректное значние! Повторите ввод!')
             return
-        self.user_token = token_by_num[txt]#{token_by_num[txt]: self.token_list[token_by_num[txt]]}
+        self.user_token = txt#{token_by_num[txt]: self.token_list[token_by_num[txt]]}
         self.send_msg('Токен выбран!')
         self.put_next_step(self.put_item_menu_burse)
-        self.send_msg(self.show_menu_burse())
+        self.send_msg(self.show_menu_of_burse(), self.get_buttons_menu_of_burse())
 
     def burse_is_confirmed(self):
         return self.__burse_confirmed
@@ -547,7 +628,7 @@ class NEW(SESSION):
         self.user_pair = txt
         self.send_msg('Пара введена!')
         self.put_next_step(self.put_item_menu)
-        self.send_msg(self.show_menu())
+        self.send_msg(self.show_menu(), self.get_buttons_menu())
 
     def accept_setup_burse(self):
         if self.user_burse is None or self.user_token is None:
@@ -649,11 +730,15 @@ class EDIT(SESSION):
         self.__pair_confirmed = False
         self.put_next_step(self.begin_chat)
         self.create_log_file(chat_id)
+        self.keyboard = {
+            'keyboard': None,
+            'resize_keyboard': True,
+            'one_time_keyboard': True
+        }
 
     def begin_chat(self, txt):
         if txt == '/edit':
             self.put_next_step(self.put_item_menu)
-            #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
             self.send_msg(self.show_menu())
 
     def pair_is_confirmed(self):
@@ -666,13 +751,21 @@ class EDIT(SESSION):
                'Выберите номер:\n' \
                '1. Выбор пары - (%s)\n' \
                '2. Настройки пары\n' \
-               '3. Подтверждение создания пары\n' \
+               '3. Подтверждение изменения пары\n' \
                '\n' \
                '0. Выход.' \
                '' % (pair)
         return menu
 
-    def show_menu_pair(self):
+    def get_buttons_menu(self):
+        self.keyboard['keyboard'] = [['Выбор пары'],
+                                     ['Настройки пары'],
+                                     ['Подтверждение изменения пары'],
+                                     ['Выход']]
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
+
+    def show_menu_of_pair(self):
         menu = 'Выберите пару:\n'
 
         traders = self.__get_traders
@@ -682,6 +775,14 @@ class EDIT(SESSION):
         menu += '\n\n' \
                 '0. Назад'
         return menu
+
+    def get_buttons_menu_of_pair(self):
+        self.keyboard['keyboard'] = [['Выбор пары'],
+                                     ['Настройки пары'],
+                                     ['Подтверждение изменения пары'],
+                                     ['Выход']]
+        sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+        return sdata
 
     def show_menu_params(self):
         params = self.trader.params
@@ -931,9 +1032,6 @@ class EDIT(SESSION):
         return traders_list
 
 
-class DELETE():
-    pass
-
 class RETURN(EDIT):
     def __init__(self, chat_id, send_message, db):
         super().__init__(chat_id, send_message, db)
@@ -941,9 +1039,7 @@ class RETURN(EDIT):
     def begin_chat(self, txt):
         if txt == '/return':
             self.put_next_step(self.put_item_menu)
-            #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
             self.send_msg(self.show_menu())
-
 
     def show_menu(self):
         pair = self.get_user_pair()
@@ -1089,9 +1185,6 @@ class SUBSCRIPTION(SESSION):
                 self.send_msg('Вы подписаны на рассылку уведомлений!')
                 self.put_session_complited()
                 return
-            # self.put_next_step(self.put_item_menu)
-            # #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
-            # self.send_msg(self.show_menu()
 
 
 class INFO(SESSION):
@@ -1107,7 +1200,6 @@ class INFO(SESSION):
     def begin_chat(self, txt):
         if txt == '/info':
             self.put_next_step(self.put_item_main_menu)
-            #self.send_msg("'K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c'")
             self.send_msg(self.show_main_menu())
 
     def show_main_menu(self):
@@ -1241,144 +1333,3 @@ class INFO(SESSION):
                 info += '%s\n\n' % trader.data
 
         return info
-
-
-
-
-class TBot:
-    HTTP_ADDR = r'https://api.telegram.org'
-    offset = 0
-    active_of_session = {}
-    special_commands = {'/new': NEW,
-                        '/edit': EDIT,
-                        '/return': RETURN,
-                        '/sub': SUBSCRIPTION,
-                        '/info': INFO,
-                        '/photo': None}
-
-    ans = "Поддерживаемые команды:\n\n\n" \
-          "/info - информация по парам\n\n" \
-          "/new - создание новой пары\n\n" \
-          "/edit - редактирование настроек пары\n\n" \
-          "/return - восставноление пары из архива\n\n" \
-          "/sub - подписка на рассылку уведовлений"
-
-    def __init__(self, opera_driver, token, db):
-        self.browser = opera_driver
-        self.token = token
-        self.db = db
-
-    def get_updates(self, offset):
-        self.browser.get('https://api.telegram.org/bot%s/getUpdates?offset=%s&timeout=120' % (self.token, offset))
-        js = self.__get_json_obj()
-        if not js['ok']:
-            print(js['error_code'], js['description'])
-            raise Exception('Error - %s' % js['error_code'])
-        return js
-
-    def send_msg(self, chat_id, txt):
-        txt = quote_plus(txt)
-        self.browser.get('https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s' % (self.token, chat_id, txt))
-        js = self.__get_json_obj()
-        if not js['ok']:
-            print(js['error_code'], js['description'])
-            raise Exception('Error - %s' % js['error_code'])
-        return js
-
-    def send_image(self, chat_id, image_path):
-        files = {'photo': open(image_path, 'rb')}
-        # from requests_toolbelt import MultipartEncoder
-        # multipart_data = MultipartEncoder(
-        #     fields={
-        #         # a file upload field
-        #         'file': ('file.py', open(image_path, 'rb'), 'text/plain')
-        #     }
-        # )
-
-        # print(multipart_data.boundary)
-        from urllib import parse
-        data = parse.urlencode(files)
-        self.browser.get('https://api.telegram.org/bot%s/sendPhoto?chat_id=%s&%s' % (self.token, chat_id, data))
-        js = self.__get_json_obj()
-        if not js['ok']:
-            print(js['error_code'], js['description'])
-            raise Exception('Error - %s' % js['error_code'])
-        return js
-
-    def __get_json_obj(self):
-        txt = self.browser.find_element_by_tag_name('pre').text
-        return json.loads(txt)
-
-    def clear_session_of_done(self):
-        while 1:
-            for chat_id in self.active_of_session:
-                if self.active_of_session[chat_id].session_is_done():
-                    self.active_of_session.pop(chat_id)
-                    break
-                if self.active_of_session[chat_id].is_timeouted():
-                    self.active_of_session.pop(chat_id)
-                    self.send_msg(chat_id, 'Сессия завершена.')
-                    break
-            else:
-                return
-
-    def send_message_to_all(self):
-        try:
-            reports = self.db.query(REPORT).all()
-            for report in reports:
-                if report.user_id == 0:
-                    self.send_all(report.data)
-                else:
-                    self.send_msg(report.user_id, report.data)
-                self.db.delete(report)
-            self.db.commit()
-        except Exception as e:
-            print(e)
-
-    def send_all(self, data):
-        dispatch_all = self.db.query(DISPATCH).all()
-        for d in dispatch_all:
-            self.send_msg(d.user_id, data)
-
-    def run(self):
-        while 1:
-            try:
-                upd = self.get_updates(self.offset)
-                print(len(upd['result']))
-                for update in upd['result']:
-                    self.offset = int(update['update_id']) + 1
-                    if 'message' not in update or 'text' not in update['message']:
-                        continue
-
-                    txt = update['message']['text']
-                    chat_id = update['message']['chat']['id']
-                    if txt in self.special_commands:
-                        if txt == '/photo':
-                            continue#self.send_image(chat_id, r'C:\Users\a.ermakov\Desktop\Figure_1.png')
-                        if chat_id in self.active_of_session:
-                            self.active_of_session.pop(chat_id)
-                            self.send_msg(chat_id, 'Предыдущая сессия завершена.')
-                        new_session = self.special_commands[txt]
-                        self.active_of_session.update(
-                            {chat_id: new_session(chat_id, self.send_msg, self.db)}
-                        )
-                    if chat_id in self.active_of_session:
-                        session = self.active_of_session[chat_id]
-                        if session.session_is_done():
-                            self.send_msg(chat_id, self.ans)
-                        else:
-                            session.run(txt)
-                    else:
-                        self.send_msg(chat_id, self.ans)#'Gde%0A20+20%D0%A2%D1%8B')
-                self.clear_session_of_done()
-                self.send_message_to_all()
-                time.sleep(1)
-            except NoSuchElementException:
-                print('Ошибка получения элемента страницы.')
-            except TimeoutException:
-                print('TIMEOUT!')
-            except Exception as ex:
-                if 'Error - 502' in ex.__str__():
-                    print(u'Ошибка 502.')
-                else:
-                    raise

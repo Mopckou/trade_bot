@@ -41,7 +41,8 @@ class TRADER_CONTROL:
         for task in tasks:
             if task.task_name in self.commands:
                 result = self.handler(task)
-                if result: self.put_task_comlited(task)
+                if result:
+                    self.put_task_comlited(task)
 
     def put_task_comlited(self, task):
         task.is_done = True
@@ -183,7 +184,7 @@ class TRADER_CONTROL:
             if new_trader.__getattribute__(param) != params[param]:
                 new_trader.__setattr__(param, params[param])
 
-    def put_trader_in_archive(self, trader, err):
+    def put_trader_in_archive(self, trader, err=None):
         traders = self.__get_traders_from_db()
         for tr in traders:
             if tr.pair == trader.pair and tr.token_name == trader.account:
@@ -238,7 +239,7 @@ class TRADER_CONTROL:
                     self.put_trader_in_archive(trader, e)
             for trader in self.container:
                 if trader.pair_is_complited:
-                    self.put_trader_in_archive(trader, None)
+                    self.put_trader_in_archive(trader)
 
 
 NAME = 'TRADE_DATA_BASE.db'
