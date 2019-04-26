@@ -571,7 +571,8 @@ class TRADER:
     def __equal(self, other):
         difference = other - self.minimum_cash_in_currency
         #self.logging(difference)
-        return difference >= 0 and difference <= SATOSHI * self.smoll_fraction # всегда остается остаток порядка 5 сатоши, условие чтобы остаток не превышал 10 сатоши
+        return difference >= 0 and difference <= SATOSHI * self.smoll_fraction  # всегда остается остаток порядка
+        # 5 сатоши, условие чтобы остаток не превышал 10 сатоши
 
     def get_amount_for_sell(self, last_important_purchases):
         amount = self.__get_amount_by_last_orders(last_important_purchases)
@@ -591,7 +592,7 @@ class TRADER:
         return quantity_for_sell
 
     def __calc_price(self, amount, quantity, is_profit):
-        amount += amount * self.percent_of_burse# прибавляем 0.2%, чтобы посчитать цену с учетом комиссии
+        amount += amount * self.percent_of_burse  # прибавляем 0.2%, чтобы посчитать цену с учетом комиссии
         if is_profit:
             amount += amount * self.percent_of_profit / 100
         price = amount / quantity

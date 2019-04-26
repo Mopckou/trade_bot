@@ -57,25 +57,25 @@ class TBot:
             raise Exception('Error - %s' % js['error_code'])
         return js
 
-    def send_image(self, chat_id, image_path):
-        files = {'photo': open(image_path, 'rb')}
-        # from requests_toolbelt import MultipartEncoder
-        # multipart_data = MultipartEncoder(
-        #     fields={
-        #         # a file upload field
-        #         'file': ('file.py', open(image_path, 'rb'), 'text/plain')
-        #     }
-        # )
-
-        # print(multipart_data.boundary)
-        from urllib import parse
-        data = parse.urlencode(files)
-        self.browser.get('https://api.telegram.org/bot%s/sendPhoto?chat_id=%s&%s' % (self.token, chat_id, data))
-        js = self.__get_json_obj()
-        if not js['ok']:
-            print(js['error_code'], js['description'])
-            raise Exception('Error - %s' % js['error_code'])
-        return js
+    # def send_image(self, chat_id, image_path):
+    #     files = {'photo': open(image_path, 'rb')}
+    #     # from requests_toolbelt import MultipartEncoder
+    #     # multipart_data = MultipartEncoder(
+    #     #     fields={
+    #     #         # a file upload field
+    #     #         'file': ('file.py', open(image_path, 'rb'), 'text/plain')
+    #     #     }
+    #     # )
+    #
+    #     # print(multipart_data.boundary)
+    #     from urllib import parse
+    #     data = parse.urlencode(files)
+    #     self.browser.get('https://api.telegram.org/bot%s/sendPhoto?chat_id=%s&%s' % (self.token, chat_id, data))
+    #     js = self.__get_json_obj()
+    #     if not js['ok']:
+    #         print(js['error_code'], js['description'])
+    #         raise Exception('Error - %s' % js['error_code'])
+    #     return js
 
     def __get_json_obj(self):
         txt = self.browser.find_element_by_tag_name('pre').text
@@ -117,6 +117,7 @@ class TBot:
             try:
                 upd = self.get_updates(self.offset)
                 print(len(upd['result']))
+
                 for update in upd['result']:
                     self.offset = int(update['update_id']) + 1
                     if 'message' not in update or 'text' not in update['message']:
@@ -124,16 +125,21 @@ class TBot:
 
                     txt = update['message']['text']
                     chat_id = update['message']['chat']['id']
+
                     if txt in self.special_commands:
+
                         if txt == '/photo':
-                            continue#self.send_image(chat_id, r'C:\Users\a.ermakov\Desktop\Figure_1.png')
+                            continue
+
                         if chat_id in self.active_of_session:
                             self.active_of_session.pop(chat_id)
                             self.send_msg(chat_id, 'Предыдущая сессия завершена.')
+
                         new_session = self.special_commands[txt]
                         self.active_of_session.update(
                             {chat_id: new_session(chat_id, self.send_msg, self.db)}
                         )
+
                     if chat_id in self.active_of_session:
                         session = self.active_of_session[chat_id]
                         if session.session_is_done():
@@ -141,7 +147,8 @@ class TBot:
                         else:
                             session.run(txt)
                     else:
-                        self.send_msg(chat_id, self.ans)#'Gde%0A20+20%D0%A2%D1%8B')
+                        self.send_msg(chat_id, self.ans)
+
                 self.clear_session_of_done()
                 self.send_message_to_all()
                 time.sleep(1)
