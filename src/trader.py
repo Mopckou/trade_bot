@@ -1,7 +1,9 @@
 import errno
 import os
 import time
-from socket import timeout
+import datetime
+import zipfile
+from socket import timeout, gaierror
 from ssl import SSLEOFError
 from src.dbase import TRADE, REPORT
 from src.burse import Exmo
@@ -9,22 +11,31 @@ from src.burse import Exmo
 LOG_DIRECTORY = os.path.join(os.getcwd(), 'LOGS')
 NAME_LOG = 'log.txt'
 SATOSHI = 0.00000001
+MAX_SIZE_FILE = 40
 
 
 class ErrorFoundPurchases(Exception):
-    pass
+
+    def __str__(self):
+        return u'Error found purchases!'
 
 
 class ErrorEnoughCash(Exception):
-    pass
+
+    def __str__(self):
+        return u'Error enough cash!'
 
 
 class ErrorCalcAmount(Exception):
-    pass
+
+    def __str__(self):
+        return u'Error calc amount!'
 
 
 class ErrorDownPrice(Exception):
-    pass
+
+    def __str__(self):
+        return u'Error down price!'
 
 
 class STAGE:
@@ -49,9 +60,11 @@ class TRADER:
     percent_of_profit = 1  # процент при котором продаем валюту
     increase_cash_of_buy = True  # флаг повышать ли цену покупки при каждом закупе
     coeff_increase_of_cash = 2.  # коэффициент увеличения цены при каждом закупе
+    waiting_time_before_buying = 300  # время ожидания перед покупкой в секундах
     is_end_trade = False
     pair_is_complited = False
     smoll_fraction = 15
+    __last_time_of_sale = None
 
     params = {
         'minimum_cash_in_currency': "Несгораемая сумма на счету.",
@@ -66,7 +79,8 @@ class TRADER:
         'increase_cash_of_buy': "Параметр повышения суммы закупки.",
         'coeff_increase_of_cash': "Коэффициент увеличения суммы закупки.",
         'is_end_trade': "Остановить пару после полной продажи.",
-        'smoll_fraction': "Допустимое количество Сатоши сверху пересчитанной суммы."
+        'smoll_fraction': "Допустимое количество Сатоши сверху пересчитанной суммы.",
+        'waiting_time_before_buying': "Время ожидания перед покупкой. Указывать время в секундах!"
     }
 
     def __init__(self, db=None, pair=None, api=None, account=None):
@@ -87,9 +101,9 @@ class TRADER:
         self.out_currency = self.__get_out_currency()
 
     def create_log_file(self, pair, api, account):
-        name_folder = '%s' % api
-        name_log = '%s.txt' % pair
-        self.current_log_directory = os.path.join(LOG_DIRECTORY, name_folder, account)
+        name_api = '%s' % api
+        name_log = 'log.txt'
+        self.current_log_directory = os.path.join(LOG_DIRECTORY, name_api, account, pair)
         self.log = os.path.join(self.current_log_directory, name_log)
         if not os.path.exists(self.current_log_directory):
             self.make_sure_path_exists(self.current_log_directory)
@@ -110,6 +124,18 @@ class TRADER:
             fl = open(self.log, 'w')
         fl.write("%s: %s\n" % (time.ctime(), message))
         fl.close()
+
+    def archive(self):
+        size = os.path.getsize(self.log) / 1024 ** 2
+        if size >= MAX_SIZE_FILE:
+
+            log = os.path.join(self.current_log_directory, '%s.zip' % time.strftime('%d-%m-%y %H:%S'))
+            try:
+                with zipfile.ZipFile(log, 'w') as zf:
+                    zf.write(self.log)
+                os.remove(self.log)
+            except Exception as ex:
+                print('ОШИБКА АРХИВИРОВАНИЯ: %s' % ex)
 
     def run(self):
         self.pair_info = 'Время сбора информации:\n%s\n' % time.ctime()
@@ -134,15 +160,15 @@ class TRADER:
         except ErrorEnoughCash as ex:
             self.logging(ex)
         except timeout as ex:
-            self.logging(u'Вышел таймаут на подключение к серверу. Ошибка - %s' % ex)
-            print('TIMEOUT!!!')
+            self.logging(u'Вышел таймаут на подключение к серверу. Ошибка - %s' % ex, True)
+        except gaierror as ex:
+            self.logging(ex, True)
         except OSError as ex:
             self.logging(ex)
             if ex.errno not in [errno.ECONNABORTED, errno.ECONNRESET, errno.ETIMEDOUT]:
                 raise
         except SSLEOFError as ex:
-            self.logging(u'Ошиюка SSL - %s' % ex)
-            print('SSL ERROR')
+            self.logging(u'Ошиюка SSL - %s' % ex, True)
         except Exception as ex:
             self.logging(ex)
             if '40016' in ex.__str__():
@@ -158,6 +184,7 @@ class TRADER:
                 return
             raise
         finally:
+            self.archive()
             self.report_about_pair()
             self.pair_info = None
 
@@ -193,27 +220,35 @@ class TRADER:
 
     def block_of_buy(self):
         open_orders = self.api.get_open_orders()
+
         if self.is_open_orders(open_orders):
             self.cancel_all_open_orders(open_orders[self.pair])
+
         if self.is_more_currency_in_pair():
             self.flag = STAGE.SELL
             return
-        else:
-            self.create_order_of_buy()
-            self.flag = STAGE.WAIT_BUY
-            self.reset_timeout_of_waiting()
+
+        if not self.is_ready_to_buy():
             return
 
+        self.create_order_of_buy()
+        self.flag = STAGE.WAIT_BUY
+        self.reset_timeout_of_waiting()
+        return
+
     def block_of_report(self):
+        self.__last_time_of_sale = time.time()
         amount_spent, amount_received, profit = self.calc_profit()
         self.report_about_sell(
             amount_spent,
             amount_received,
             profit
         )
+
         if self.is_end_trade:
             self.pair_is_complited = True
             return
+
         self.flag = STAGE.BUY
         return
 
@@ -230,6 +265,12 @@ class TRADER:
             if not answer['result']:
                 self.logging('order not cancel')
             self.logging('order is cancel')
+
+    def is_ready_to_buy(self):
+        if self.__last_time_of_sale is None:
+            return True
+
+        return (time.time() - self.__last_time_of_sale) > self.waiting_time_before_buying
 
     def is_currency(self, currency, cash):
         balances = self.__get_balances()
@@ -361,35 +402,41 @@ class TRADER:
 
     def block_of_wait_buy(self):
         open_orders = self.api.get_open_orders()
+
         if self.order_is_purchased(open_orders):
             self.flag = STAGE.SELL
             self.count_order_trades = 0
             return
+
         if not self.order_is_first(open_orders[self.pair], 'bid'):
             self.logging(u'Оредр перебит. Отмена ордера.')
             self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.BUY
             self.count_order_trades = 0
             return
+
         if self.is_timeout():
             self.logging(u'wait buy is timeout! Flag = stage.buy')
             self.flag = STAGE.BUY
             self.cancel_all_open_orders(open_orders[self.pair])
-            self.count_order_trades = 0# колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
+            self.count_order_trades = 0  # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
             return
 
     def block_of_wait_sell(self):
         open_orders = self.api.get_open_orders()
+
         if self.order_is_purchased(open_orders):
             self.flag = STAGE.REPORT
             self.count_order_trades = 0
             return
+
         if not self.order_is_first(open_orders[self.pair], 'ask'):
             self.logging(u'Оредр перебит. Отмена ордера.')
             self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.SELL
             self.count_order_trades = 0
             return
+
         if self.is_timeout():
             self.logging(u'Вышло время ожидания покупки ордера! Переход в блок STAGE.SELL...')
             self.cancel_all_open_orders(open_orders[self.pair])
@@ -484,9 +531,9 @@ class TRADER:
                 self.logging(u'Условие закупа соблюдается.')
                 if amount < self.maximum_amount_for_buy:
                     print('ЗАКУП - %s!' % self.pair)
-                    self.logging(u'Колличество валюты которое было продано не превышает лимит!')
+                    self.logging(u'Колличество валюты которое было куплено не превышает лимит!')
                     raise ErrorDownPrice
-                self.logging(u'Колличество валюты которые было продано превышает лимит!')
+                self.logging(u'Колличество валюты которое было куплено превышает лимит!')
             elif price_with_profit <= current_price_of_sell:
                 self.create_order_of_sell(current_price_of_sell, quantity)
                 self.reset_timeout_of_waiting()
@@ -511,6 +558,7 @@ class TRADER:
                 self.reset_timeout_of_waiting()
                 self.flag = STAGE.WAIT_BUY
                 return
+            self.logging(ex, True)
             raise
 
     def __correction_quantity(self, quantity_in_currency, quantity):
@@ -576,7 +624,7 @@ class TRADER:
 
     def get_amount_for_sell(self, last_important_purchases):
         amount = self.__get_amount_by_last_orders(last_important_purchases)
-        self.logging(u'Количество валюты которое было потрачено - %s' % amount)
+        self.logging(u'Количество amount (денег) которое было потрачено - %s' % amount)
         if amount < 0.:
             raise ErrorCalcAmount
         return amount

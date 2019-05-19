@@ -168,7 +168,7 @@ class TRADER_CONTROL:
 
     def report_archive_trader(self, pair, err):
         if err is None:
-            ans = 'На паре - %s торговля завершена. Ошибок нет. \n\nВведите команду /return для возообновления работы пары.' % (err)
+            ans = 'На паре - %s торговля завершена. Ошибок нет. \n\nВведите команду /return для возообновления работы пары.' % (pair)
         else:
             ans = 'Ошибка! Пара - %s выключена и помещена в архив!\nОшибка - %s.\n\nВведите команду /return для возообновления работы пары.' % (pair, err)
         report = REPORT(0, ans)

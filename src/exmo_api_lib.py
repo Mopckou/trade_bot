@@ -47,12 +47,29 @@ class ExmoAPI:
             #raise sys.exit()
             raise Exception('Error while parsing response:', response)
 
-# Example
-# ExmoAPI_instance = ExmoAPI('K-361b9b48d086a6e0fdd023b52e511fb240a47086', 'S-0fec47713fe877c7894671a75e0465e774009f8c')
-# # print(ExmoAPI_instance.api_query('required_amount', {'pair':'BTC_USD', 'quantity':'0.001'}))
+
+# ExmoAPI_instance = ExmoAPI('K-a2e557d4643e6f10bbcf6bdfe7d035bcd9ff976e', 'S-7b00b3bd5fd718630b633e13075a8e744f10a63a')
+#
 # pair = {
-#     'pair': 'EOS_USD'
+#     'pair': 'XRP_USD'
 # }
+# print(ExmoAPI_instance.api_query('user_info'))
+#
+# print(ExmoAPI_instance.api_query('user_trades', pair))
+#
+# print(ExmoAPI_instance.api_query('user_cancelled_orders'))
+
+
+
+
+
+
+
+
+
+
+
+
 # order_book = ExmoAPI_instance.api_query('order_book', pair)
 # print(order_book)
 # order_book_by_pair = order_book[pair['pair']]

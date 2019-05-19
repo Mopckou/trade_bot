@@ -33,3 +33,28 @@ src/operadriver_win64/operadriver.exe
 src/operadriver_win64/sha512_sum
 src/OT_TESTS.db
 .idea/workspace.xml
+LOGS/EXMO/bot/ADA_USD/17-05-19 02
+*.db
+*.pyc
+*.pyc
+src/__pycache__/burse.cpython-36.pyc
+src/__pycache__/commands.cpython-36.pyc
+LOGS/EXMO/Morskoy/ADA_USD/19-05-19 00
+LOGS/EXMO/Morskoy/BCH_USD/18-05-19 05
+LOGS/EXMO/Morskoy/BCH_USD/19-05-19 06
+LOGS/EXMO/Morskoy/BTC_USD/17-05-19 09
+LOGS/EXMO/Morskoy/BTC_USD/18-05-19 18
+LOGS/EXMO/Morskoy/ADA_USD/17-05-19 18
+LOGS/EXMO/Morskoy/ADA_USD/17-05-19 02
+LOGS/EXMO/Morskoy/ADA_USD/18-05-19 09
+LOGS/EXMO/bot/ADA_USD/18-05-19 13
+LOGS/EXMO/bot/ADA_USD/19-05-19 16
+LOGS/EXMO/Morskoy/BCH_USD/16-05-19 22
+src/__pycache__/burse.cpython-36.pyc
+src/__pycache__/commands.cpython-36.pyc
+src/__pycache__/exmo_api_lib.cpython-36.pyc
+src/__pycache__/telegram_bot.cpython-36.pyc
+src/__pycache__/trader.cpython-36.pyc
+src/__pycache__/config.cpython-36.pyc
+src/__pycache__/commands.cpython-36.pyc
+src/__pycache__/burse.cpython-36.pyc

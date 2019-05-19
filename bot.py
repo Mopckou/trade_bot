@@ -12,7 +12,7 @@ DATABASE = os.path.abspath(
         os.path.split(__file__)[0], 'src', 'db', NAME
     )
 )
-binary_loc = r"C:\Users\a.ermakov\AppData\Local\Programs\Opera\56.0.3051.52_0\opera.exe"
+binary_loc = r"C:\Users\a.ermakov\AppData\Local\Programs\Opera\60.0.3255.70\opera.exe"
 chrome_driver_loc = r"C:\OTbot\src\operadriver_win64\operadriver.exe"
 opera_settings = r'C:\Users\a.ermakov\AppData\Roaming\Opera Software\Opera Stable Work'
 

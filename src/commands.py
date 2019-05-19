@@ -182,7 +182,7 @@ class NEW(SESSION):
                 '0. Назад'
         return menu
 
-    def get_button_menu_of_params(self):
+    def get_buttons_menu_of_params(self):
         self.keyboard['keyboard'] = []
         params = self.trader.params
 
@@ -256,7 +256,7 @@ class NEW(SESSION):
                self.send_msg('Введите сначада пару!')
                return
             self.put_next_step(self.put_item_menu_param)
-            self.send_msg(self.show_menu_of_params(), self.get_button_menu_of_params())
+            self.send_msg(self.show_menu_of_params(), self.get_buttons_menu_of_params())
             return
         elif txt == 'Подтверждение создания пары':
             if not self.burse_is_confirmed() or not self.pair_is_confirmed():
@@ -277,7 +277,7 @@ class NEW(SESSION):
             self.trader.__setattr__(self.change_param, value)
             self.put_next_step(self.put_item_menu_param)
             self.send_msg('Параметр введен!')
-            self.send_msg(self.show_menu_of_params(), self.get_button_menu_of_params())
+            self.send_msg(self.show_menu_of_params(), self.get_buttons_menu_of_params())
             self.change_param = None
 
     def get_format_param(self, txt):
@@ -365,14 +365,14 @@ class NEW(SESSION):
 
     def put_item_menu_of_confirmation(self, txt):
         if txt not in ['Нет', 'Да']:
-            self.send_msg('Не корректный номер. Повторите ввод.')
+            self.send_msg('Не корректный запрос. Повторите ввод.')
             return
         if txt == 'Нет':
             self.put_next_step(self.put_item_menu)
             self.send_msg(self.show_menu(), self.get_buttons_menu())
             return
         elif txt == 'Да':
-            result, task_id = self.create_task()
+            result, task_id = self.create_new_task()
             if not result:
                 self.send_msg('Ошибка. Новая пара не зарегистрирована!')
                 self.put_next_step(self.put_item_menu)
@@ -420,7 +420,7 @@ class NEW(SESSION):
             return
         if txt == 'Назад':
             self.put_next_step(self.put_item_menu_param)
-            self.send_msg(self.show_menu_of_params(), self.get_button_menu_of_params())
+            self.send_msg(self.show_menu_of_params(), self.get_buttons_menu_of_params())
             return
         elif txt == 'Ввод параметра':
             self.put_next_step(self.put_param)
@@ -618,13 +618,16 @@ class NEW(SESSION):
     def pair_is_confirmed(self):
         return self.__pair_confirmed
 
+    def confirm_pair(self):
+        self.__pair_confirmed = True
+
     def put_pair(self, txt):
         txt = txt.upper()
         result = self.check_pair(txt)
         if not result:
             self.send_msg('Неверная пара! Введите еще раз!')
             return
-        self.__pair_confirmed = True
+        self.confirm_pair()
         self.user_pair = txt
         self.send_msg('Пара введена!')
         self.put_next_step(self.put_item_menu)
@@ -648,8 +651,8 @@ class NEW(SESSION):
             self.send_msg('На счету - %s USD.' % balance)
             return True
 
-    def create_task(self):
-        task = self.__create_task()
+    def create_new_task(self):
+        task = self.create_task()
         task_id = None
         try:
             self.db.add(task)
@@ -670,7 +673,7 @@ class NEW(SESSION):
                 task_id = task.id
         return True, task_id
 
-    def __create_task(self):
+    def create_task(self):
         data = {}
         data.update(
             {
@@ -720,29 +723,15 @@ class NEW(SESSION):
         return True
 
 
-class EDIT(SESSION):
+class EDIT(NEW):
 
     def __init__(self, chat_id, send_message, db):
-        super().__init__(chat_id, send_message)
-        self.reset_timeout()
-        self.db = db
-        self.user_pair = None
-        self.__pair_confirmed = False
-        self.put_next_step(self.begin_chat)
-        self.create_log_file(chat_id)
-        self.keyboard = {
-            'keyboard': None,
-            'resize_keyboard': True,
-            'one_time_keyboard': True
-        }
+        super().__init__(chat_id, send_message, db)
 
     def begin_chat(self, txt):
         if txt == '/edit':
             self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
-
-    def pair_is_confirmed(self):
-        return self.__pair_confirmed
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
 
     def show_menu(self):
         pair = self.get_user_pair()
@@ -768,7 +757,7 @@ class EDIT(SESSION):
     def show_menu_of_pair(self):
         menu = 'Выберите пару:\n'
 
-        traders = self.__get_traders
+        traders = self.get_traders
         for num, trader in enumerate(traders, 1):
             menu += '%s. Пара - (%s), Токен - (%s), Биржка - (%s).\n' % (num, trader.pair, trader.token_name, trader.burse)
 
@@ -777,37 +766,18 @@ class EDIT(SESSION):
         return menu
 
     def get_buttons_menu_of_pair(self):
-        self.keyboard['keyboard'] = [['Выбор пары'],
-                                     ['Настройки пары'],
-                                     ['Подтверждение изменения пары'],
-                                     ['Выход']]
+        self.keyboard['keyboard'] = []
+        traders = self.get_traders
+
+        for num, param in enumerate(traders, 1):
+            self.keyboard['keyboard'].append(
+                [str(num)]
+            )
+        self.keyboard['keyboard'].append(['Назад'])
         sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
         return sdata
 
-    def show_menu_params(self):
-        params = self.trader.params
-        menu = 'Выберите нужный параметр:'
-        for num, param in enumerate(params, 1):
-            menu += '\n%s. %s (%s)' % (num, param, self.trader.__getattribute__(param))
-        menu += '\n' \
-                '\n' \
-                '0. Назад'
-        return menu
-
-    def show_menu_change_param(self):
-        info_param = self.trader.params[self.change_param]
-        value = self.trader.__getattribute__(self.change_param)
-        menu = 'Описание параметра: \n' \
-               '%s\n' \
-               '\n' \
-               'Выберите номер:\n' \
-               '1. Ввод параметра (%s)\n' \
-               '\n' \
-               '0. Назад.' \
-               '' % (info_param, value)
-        return menu
-
-    def show_menu_accept(self):
+    def show_menu_of_confirmation(self):
         menu = 'Вы уверены, что хотите изменить пару? \n' \
                '\n' \
                'Выберите номер:\n' \
@@ -817,7 +787,7 @@ class EDIT(SESSION):
         return menu
 
     @property
-    def __get_traders(self):
+    def get_traders(self):
         try:
             traders = self.db.query(TRADE).all()
         except Exception as e:
@@ -834,30 +804,30 @@ class EDIT(SESSION):
         return trader_data
 
     def put_item_menu(self, txt):
-        if txt not in ['0', '1', '2', '3', '4']:
-            self.send_msg('Не корректный номер. Повторите ввод.')
+        if txt not in ['Выход', 'Выбор пары', 'Настройки пары', 'Подтверждение изменения пары']:
+            self.send_msg('Не корректный запрос. Повторите ввод.')
             return
-        if txt == '0':
+        if txt == 'Выход':
             self.put_session_complited()
-            self.send_msg('Выход из сессии.')
+            self.send_msg('Выход из сессии.', self.remove_buttons())
             return
-        elif txt == '1':
+        elif txt == 'Выбор пары':
             self.put_next_step(self.put_item_menu_pair)
-            self.send_msg(self.show_menu_pair())
+            self.send_msg(self.show_menu_of_pair(), self.get_buttons_menu_of_pair())
             return
-        elif txt == '2':
+        elif txt == 'Настройки пары':
             if not self.pair_is_confirmed():
-               self.send_msg('Выберите сначада пару!')
+               self.send_msg('Выберите сначала пару!')
                return
             self.put_next_step(self.put_item_menu_param)
-            self.send_msg(self.show_menu_params())
+            self.send_msg(self.show_menu_of_params(), self.get_buttons_menu_of_params())
             return
-        elif txt == '3':
+        elif txt == 'Подтверждение изменения пары':
             if not self.pair_is_confirmed():
                 self.send_msg('Выберите сначала пару!')
                 return
-            self.put_next_step(self.put_item_menu_accept)
-            self.send_msg(self.show_menu_accept())
+            self.put_next_step(self.put_item_menu_of_confirmation)
+            self.send_msg(self.show_menu_of_confirmation(), self.get_buttons_menu_of_confirmation())
             return
 
     def get_user_pair(self):
@@ -868,14 +838,14 @@ class EDIT(SESSION):
 
     def put_item_menu_pair(self, txt):
         trade_by_num = self.get_trade_by_num()
-        if txt == '0':
+        if txt == 'Назад':
             self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
             return
         if txt not in trade_by_num:
             self.send_msg('Некорректное значние! Повторите ввод!')
             return
-        self.__pair_confirmed = True
+        self.confirm_pair()
         self.trader = TRADER()
         self.trade_from_db = trade_by_num[txt]
         self.user_pair = self.trade_from_db.pair
@@ -883,57 +853,26 @@ class EDIT(SESSION):
         self.update_params(self.trader, params)
         self.send_msg('Пара выбрана!')
         self.put_next_step(self.put_item_menu)
-        self.send_msg(self.show_menu())
+        self.send_msg(self.show_menu(), self.get_buttons_menu())
 
-    def put_item_menu_param(self, txt):
-        params = self.trader.params
-        if txt == '0':
-            self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
-            return
-        try:
-            int(txt)
-        except:
-            self.send_msg('Введите число!')
-            return
-        for num, param in enumerate(params, 1):
-            if int(txt) == num:
-                self.send_msg('Параметр выбран!')
-                self.put_next_step(self.put_menu_change_param)
-                self.change_param = param
-                self.send_msg(self.show_menu_change_param())
-                return
-        self.send_msg('Неверный номер параметра!')
-
-    def put_menu_change_param(self, txt):
-        if txt not in ['0', '1']:
+    def put_item_menu_of_confirmation(self, txt):
+        if txt not in ['Нет', 'Да']:
             self.send_msg('Не корректный номер. Повторите ввод.')
             return
-        if txt == '0':
-            self.put_next_step(self.put_item_menu_param)
-            self.send_msg(self.show_menu_params())
-            return
-        elif txt == '1':
-            self.put_next_step(self.put_param)
-            self.send_msg('Введите значение параметра.')
-            return
-
-    def put_item_menu_accept(self, txt):
-        if txt not in ['0', '1']:
-            self.send_msg('Не корректный номер. Повторите ввод.')
-            return
-        if txt == '0':
+        if txt == 'Нет':
             self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
             return
-        elif txt == '1':
-            result, task_id = self.create_task()
+        elif txt == 'Да':
+            result, task_id = self.create_new_task()
             if not result:
                 self.send_msg('Ошибка. Изменение пары не зарегистрировано!')
                 self.put_next_step(self.put_item_menu)
-                self.send_msg(self.show_menu())
+                self.send_msg(self.show_menu(), self.get_buttons_menu())
                 return
-            self.send_msg('Изменение пары зарегистрировано. \nОжидайте сообщение о вступлении в силу изменений. \n\nЗадание номер - %s.' % task_id)
+            self.send_msg('Новая пара зарегистрирована. '
+                          '\nОжидайте сообщение о начале работы новой пары. '
+                          '\n\nЗадание номер - %s.' % task_id, self.remove_buttons())
             self.put_session_complited()
             return
 
@@ -948,59 +887,10 @@ class EDIT(SESSION):
             self.trader.__setattr__(self.change_param, value)
             self.put_next_step(self.put_item_menu_param)
             self.send_msg('Параметр введен!')
-            self.send_msg(self.show_menu_params())
+            self.send_msg(self.show_menu_of_params(), self.get_buttons_menu_of_params())
             self.change_param = None
 
-    def get_format_param(self, txt):
-        try:
-            self.to_bool(txt)
-        except:
-            return float
-        else:
-            return self.to_bool
-
-    def is_format_param(self, param, format):
-        try:
-            format(param)
-        except:
-            return False
-        else:
-            return True
-
-    def to_bool(self, txt):
-        if type(txt) is not bool:
-            txt = txt.upper()
-        if txt in [True, 'TRUE', '1']:
-            return True
-        elif txt in [False, 'FALSE', '0']:
-            return False
-        else:
-            print('not bool')
-            raise Exception('Not bool')
-
     def create_task(self):
-        task = self.__create_task()
-        task_id = None
-        try:
-            self.db.add(task)
-            self.db.commit()
-        except Exception as ex:
-            self.logging(ex)
-            return False, task_id
-
-        try:
-            query = self.db.query(TASK).all()
-        except Exception as ex:
-            self.logging(ex)
-            return False, task_id
-
-        self.logging(query)
-        for task in query:
-            if task.create_time == task.create_time:
-                task_id = task.id
-        return True, task_id
-
-    def __create_task(self):
         data = {}
         token = json.loads(self.trade_from_db.tokens)
         data.update(
@@ -1024,12 +914,324 @@ class EDIT(SESSION):
 
     def get_trade_by_num(self):
         traders_list = {}
-        traders = self.__get_traders
+        traders = self.get_traders
         for num, trader in enumerate(traders, 1):
             traders_list.update(
                 {str(num): trader}
             )
         return traders_list
+
+
+# class EDIT_OLD(SESSION):
+#
+#     def __init__(self, chat_id, send_message, db):
+#         super().__init__(chat_id, send_message)
+#         self.reset_timeout()
+#         self.db = db
+#         self.user_pair = None
+#         self.__pair_confirmed = False
+#         self.put_next_step(self.begin_chat)
+#         self.create_log_file(chat_id)
+#         self.keyboard = {
+#             'keyboard': None,
+#             'resize_keyboard': True,
+#             'one_time_keyboard': True
+#         }
+#
+#     def begin_chat(self, txt):
+#         if txt == '/edit':
+#             self.put_next_step(self.put_item_menu)
+#             self.send_msg(self.show_menu())
+#
+#     def pair_is_confirmed(self):
+#         return self.__pair_confirmed
+#
+#     def show_menu(self):
+#         pair = self.get_user_pair()
+#         menu = 'Редактирование настроек пары.\n' \
+#                '\n' \
+#                'Выберите номер:\n' \
+#                '1. Выбор пары - (%s)\n' \
+#                '2. Настройки пары\n' \
+#                '3. Подтверждение изменения пары\n' \
+#                '\n' \
+#                '0. Выход.' \
+#                '' % (pair)
+#         return menu
+#
+#     def get_buttons_menu(self):
+#         self.keyboard['keyboard'] = [['Выбор пары'],
+#                                      ['Настройки пары'],
+#                                      ['Подтверждение изменения пары'],
+#                                      ['Выход']]
+#         sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+#         return sdata
+#
+#     def show_menu_of_pair(self):
+#         menu = 'Выберите пару:\n'
+#
+#         traders = self.__get_traders
+#         for num, trader in enumerate(traders, 1):
+#             menu += '%s. Пара - (%s), Токен - (%s), Биржка - (%s).\n' % (num, trader.pair, trader.token_name, trader.burse)
+#
+#         menu += '\n\n' \
+#                 '0. Назад'
+#         return menu
+#
+#     def get_buttons_menu_of_pair(self):
+#         self.keyboard['keyboard'] = [['Выбор пары'],
+#                                      ['Настройки пары'],
+#                                      ['Подтверждение изменения пары'],
+#                                      ['Выход']]
+#         sdata = 'reply_markup=%s' % json.dumps(self.keyboard)
+#         return sdata
+#
+#     def show_menu_params(self):
+#         params = self.trader.params
+#         menu = 'Выберите нужный параметр:'
+#         for num, param in enumerate(params, 1):
+#             menu += '\n%s. %s (%s)' % (num, param, self.trader.__getattribute__(param))
+#         menu += '\n' \
+#                 '\n' \
+#                 '0. Назад'
+#         return menu
+#
+#     def show_menu_change_param(self):
+#         info_param = self.trader.params[self.change_param]
+#         value = self.trader.__getattribute__(self.change_param)
+#         menu = 'Описание параметра: \n' \
+#                '%s\n' \
+#                '\n' \
+#                'Выберите номер:\n' \
+#                '1. Ввод параметра (%s)\n' \
+#                '\n' \
+#                '0. Назад.' \
+#                '' % (info_param, value)
+#         return menu
+#
+#     def show_menu_accept(self):
+#         menu = 'Вы уверены, что хотите изменить пару? \n' \
+#                '\n' \
+#                'Выберите номер:\n' \
+#                '1. Да\n'\
+#                '0. Нет\n' \
+#
+#         return menu
+#
+#     @property
+#     def __get_traders(self):
+#         try:
+#             traders = self.db.query(TRADE).all()
+#         except Exception as e:
+#             self.logging(e)
+#             return []
+#         return traders
+#
+#     def get_trader_data(self):
+#         trader_data = {}
+#         for param in self.trader.params:
+#             trader_data.update(
+#                 {param: self.trader.__getattribute__(param)}
+#             )
+#         return trader_data
+#
+#     def put_item_menu(self, txt):
+#         if txt not in ['0', '1', '2', '3', '4']:
+#             self.send_msg('Не корректный номер. Повторите ввод.')
+#             return
+#         if txt == '0':
+#             self.put_session_complited()
+#             self.send_msg('Выход из сессии.')
+#             return
+#         elif txt == '1':
+#             self.put_next_step(self.put_item_menu_pair)
+#             self.send_msg(self.show_menu_of_pair())
+#             return
+#         elif txt == '2':
+#             if not self.pair_is_confirmed():
+#                self.send_msg('Выберите сначада пару!')
+#                return
+#             self.put_next_step(self.put_item_menu_param)
+#             self.send_msg(self.show_menu_params())
+#             return
+#         elif txt == '3':
+#             if not self.pair_is_confirmed():
+#                 self.send_msg('Выберите сначала пару!')
+#                 return
+#             self.put_next_step(self.put_item_menu_accept)
+#             self.send_msg(self.show_menu_accept())
+#             return
+#
+#     def get_user_pair(self):
+#         if self.user_pair is None:
+#             return '...'
+#         else:
+#             return self.user_pair
+#
+#     def put_item_menu_pair(self, txt):
+#         trade_by_num = self.get_trade_by_num()
+#         if txt == '0':
+#             self.put_next_step(self.put_item_menu)
+#             self.send_msg(self.show_menu())
+#             return
+#         if txt not in trade_by_num:
+#             self.send_msg('Некорректное значние! Повторите ввод!')
+#             return
+#         self.__pair_confirmed = True
+#         self.trader = TRADER()
+#         self.trade_from_db = trade_by_num[txt]
+#         self.user_pair = self.trade_from_db.pair
+#         params = json.loads(self.trade_from_db.params)
+#         self.update_params(self.trader, params)
+#         self.send_msg('Пара выбрана!')
+#         self.put_next_step(self.put_item_menu)
+#         self.send_msg(self.show_menu())
+#
+#     def put_item_menu_param(self, txt):
+#         params = self.trader.params
+#         if txt == '0':
+#             self.put_next_step(self.put_item_menu)
+#             self.send_msg(self.show_menu())
+#             return
+#         try:
+#             int(txt)
+#         except:
+#             self.send_msg('Введите число!')
+#             return
+#         for num, param in enumerate(params, 1):
+#             if int(txt) == num:
+#                 self.send_msg('Параметр выбран!')
+#                 self.put_next_step(self.put_menu_change_param)
+#                 self.change_param = param
+#                 self.send_msg(self.show_menu_change_param())
+#                 return
+#         self.send_msg('Неверный номер параметра!')
+#
+#     def put_menu_change_param(self, txt):
+#         if txt not in ['0', '1']:
+#             self.send_msg('Не корректный номер. Повторите ввод.')
+#             return
+#         if txt == '0':
+#             self.put_next_step(self.put_item_menu_param)
+#             self.send_msg(self.show_menu_params())
+#             return
+#         elif txt == '1':
+#             self.put_next_step(self.put_param)
+#             self.send_msg('Введите значение параметра.')
+#             return
+#
+#     def put_item_menu_accept(self, txt):
+#         if txt not in ['0', '1']:
+#             self.send_msg('Не корректный номер. Повторите ввод.')
+#             return
+#         if txt == '0':
+#             self.put_next_step(self.put_item_menu)
+#             self.send_msg(self.show_menu())
+#             return
+#         elif txt == '1':
+#             result, task_id = self.create_new_task()
+#             if not result:
+#                 self.send_msg('Ошибка. Изменение пары не зарегистрировано!')
+#                 self.put_next_step(self.put_item_menu)
+#                 self.send_msg(self.show_menu())
+#                 return
+#             self.send_msg('Изменение пары зарегистрировано. \nОжидайте сообщение о вступлении в силу изменений. \n\nЗадание номер - %s.' % task_id)
+#             self.put_session_complited()
+#             return
+#
+#     def put_param(self, txt):
+#         print(self.trader.__getattribute__(self.change_param))
+#         format = self.get_format_param(self.trader.__getattribute__(self.change_param))
+#         print(format)
+#         if not self.is_format_param(txt, format):
+#             self.send_msg('Неверный формат параметра! Повторите ввод.')
+#         else:
+#             value = format(txt)
+#             self.trader.__setattr__(self.change_param, value)
+#             self.put_next_step(self.put_item_menu_param)
+#             self.send_msg('Параметр введен!')
+#             self.send_msg(self.show_menu_params())
+#             self.change_param = None
+#
+#     def get_format_param(self, txt):
+#         try:
+#             self.to_bool(txt)
+#         except:
+#             return float
+#         else:
+#             return self.to_bool
+#
+#     def is_format_param(self, param, format):
+#         try:
+#             format(param)
+#         except:
+#             return False
+#         else:
+#             return True
+#
+#     def to_bool(self, txt):
+#         if type(txt) is not bool:
+#             txt = txt.upper()
+#         if txt in [True, 'TRUE', '1']:
+#             return True
+#         elif txt in [False, 'FALSE', '0']:
+#             return False
+#         else:
+#             print('not bool')
+#             raise Exception('Not bool')
+#
+#     def create_new_task(self):
+#         task = self.create_task()
+#         task_id = None
+#         try:
+#             self.db.add(task)
+#             self.db.commit()
+#         except Exception as ex:
+#             self.logging(ex)
+#             return False, task_id
+#
+#         try:
+#             query = self.db.query(TASK).all()
+#         except Exception as ex:
+#             self.logging(ex)
+#             return False, task_id
+#
+#         self.logging(query)
+#         for task in query:
+#             if task.create_time == task.create_time:
+#                 task_id = task.id
+#         return True, task_id
+#
+#     def create_task(self):
+#         data = {}
+#         token = json.loads(self.trade_from_db.tokens)
+#         data.update(
+#             {
+#                 'burse': self.trade_from_db.burse,
+#                 'token_name': self.trade_from_db.token_name,
+#                 'token': token,
+#                 'pair': self.trade_from_db.pair,
+#                 'trader_data': self.get_trader_data()
+#             }
+#         )
+#         str_data = json.dumps(data)
+#         task = TASK(self.chat_id, __class__.__name__, str_data)
+#         self.logging(task)
+#         return task
+#
+#     def update_params(self, new_trader, params):
+#         for param in params:
+#             if new_trader.__getattribute__(param) != params[param]:
+#                 new_trader.__setattr__(param, params[param])
+#
+#     def get_trade_by_num(self):
+#         traders_list = {}
+#         traders = self.__get_traders
+#         for num, trader in enumerate(traders, 1):
+#             traders_list.update(
+#                 {str(num): trader}
+#             )
+#         return traders_list
 
 
 class RETURN(EDIT):
@@ -1039,7 +1241,7 @@ class RETURN(EDIT):
     def begin_chat(self, txt):
         if txt == '/return':
             self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
 
     def show_menu(self):
         pair = self.get_user_pair()
@@ -1054,10 +1256,10 @@ class RETURN(EDIT):
                '' % (pair)
         return menu
 
-    def show_menu_pair(self):
+    def show_menu_of_pair(self):
         menu = 'Выберите пару:\n'
 
-        traders = self.__get_traders
+        traders = self.get_traders
         for num, trader in enumerate(traders, 1):
             menu += '%s. Пара - (%s), Токен - (%s), Биржка - (%s), Ошибка - (%s).\n' % (num, trader.pair, trader.token_name, trader.burse, trader.error)
 
@@ -1075,7 +1277,7 @@ class RETURN(EDIT):
         return menu
 
     @property
-    def __get_traders(self):
+    def get_traders(self):
         try:
             traders = self.db.query(ARCHIVE).all()
         except Exception as e:
@@ -1083,49 +1285,29 @@ class RETURN(EDIT):
             return []
         return traders
 
-    def put_item_menu_accept(self, txt):
-        if txt not in ['0', '1']:
+    def put_item_menu_of_confirmation(self, txt):
+        if txt not in ['Нет', 'Да']:
             self.send_msg('Не корректный номер. Повторите ввод.')
             return
-        if txt == '0':
+        if txt == 'Нет':
             self.put_next_step(self.put_item_menu)
-            self.send_msg(self.show_menu())
+            self.send_msg(self.show_menu(), self.get_buttons_menu())
             return
-        elif txt == '1':
-            result, task_id = self.create_task()
+        elif txt == 'Да':
+            result, task_id = self.create_new_task()
             if not result:
                 self.send_msg('Ошибка. Восстановление пары не зарегистрировано!')
                 self.put_next_step(self.put_item_menu)
-                self.send_msg(self.show_menu())
+                self.send_msg(self.show_menu(), self.get_buttons_menu())
                 return
-            self.send_msg('Восстановление пары зарегистрировано. \nОжидайте сообщение о вступлении в силу изменений. \n\nЗадание номер - %s.' % task_id)
+            self.send_msg('Новая пара зарегистрирована. '
+                          '\nОжидайте сообщение о начале работы новой пары. '
+                          '\n\nЗадание номер - %s.' % task_id, self.remove_buttons())
             self.delete_trader_in_archive()
             self.put_session_complited()
             return
 
     def create_task(self):
-        task = self.__create_task()
-        task_id = None
-        try:
-            self.db.add(task)
-            self.db.commit()
-        except Exception as ex:
-            self.logging(ex)
-            return False, task_id
-
-        try:
-            query = self.db.query(TASK).all()
-        except Exception as ex:
-            self.logging(ex)
-            return False, task_id
-
-        self.logging(query)
-        for task in query:
-            if task.create_time == task.create_time:
-                task_id = task.id
-        return True, task_id
-
-    def __create_task(self):
         data = {}
         token = json.loads(self.trade_from_db.tokens)
         data.update(
@@ -1141,15 +1323,6 @@ class RETURN(EDIT):
         task = TASK(self.chat_id, 'NEW', str_data)
         self.logging(task)
         return task
-
-    def get_trade_by_num(self):
-        traders_list = {}
-        traders = self.__get_traders
-        for num, trader in enumerate(traders, 1):
-            traders_list.update(
-                {str(num): trader}
-            )
-        return traders_list
 
     def delete_trader_in_archive(self):
         try:
