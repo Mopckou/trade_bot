@@ -58,3 +58,6 @@ src/__pycache__/trader.cpython-36.pyc
 src/__pycache__/config.cpython-36.pyc
 src/__pycache__/commands.cpython-36.pyc
 src/__pycache__/burse.cpython-36.pyc
+.idea/misc.xml
+.idea/trade_bot.iml
+.idea/workspace.xml
