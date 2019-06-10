@@ -1,9 +1,32 @@
 import time
 import json
+import random
+from src.ban_list import gaijins
 from urllib.parse import quote_plus
 from src.dbase import DISPATCH, REPORT
 from src.commands import NEW, EDIT, RETURN, SUBSCRIPTION, INFO
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
+
+
+def filter_banned(func):
+
+    def _func(*args, **kwargs):
+        obj, user = [*args][0], [*args][1]
+        if user in gaijins and gaijins[user]:
+            msg = random.choice(gaijins[user])
+            print('Забаненный пользователь постучался. %s. Пользовательно получил сообщение - %s' % (user, msg))
+            try:
+                func(obj, user, msg)
+            except Exception as e:
+                if 'Error - 403' in e.__str__():
+                    pass
+        elif user in gaijins and not gaijins[user]:
+            print('Забаненный пользователь постучался. %s' % user)
+            return
+        else:
+            return func(*args, **kwargs)
+
+    return _func
 
 
 class TBot:
@@ -39,6 +62,7 @@ class TBot:
             raise Exception('Error - %s' % js['error_code'])
         return js
 
+    @filter_banned
     def send_msg(self, chat_id, txt, data=None, parse_mode=None):
         txt = quote_plus(txt)
         req = 'https://api.telegram.org/bot%s/sendMessage?chat_id=%s&text=%s' % (self.token, chat_id, txt)
@@ -89,7 +113,7 @@ class TBot:
                     break
                 if self.active_of_session[chat_id].is_timeouted():
                     self.active_of_session.pop(chat_id)
-                    self.send_msg(chat_id, 'Сессия завершена.')
+                    #self.send_msg(chat_id, 'Сессия завершена.')
                     break
             else:
                 return

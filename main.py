@@ -2,7 +2,7 @@ import os
 import time
 import json
 from src.dbase import TASK, REPORT, TRADE, ARCHIVE
-from src.trader import TRADER
+from src.trader_new import TRADER
 from src.burse import Exmo
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -43,6 +43,12 @@ class TRADER_CONTROL:
                 result = self.handler(task)
                 if result:
                     self.put_task_comlited(task)
+
+    def saving_of_setup(self, trader):
+        params = self.extract_parameters(trader)
+        result = self.__edit_trader_in_db(trader.pair, trader.account, params)
+        if not result:
+            print('ОШИБКА СОХРАНЕНИЯ НАСТРОЕК ПАРЫ!')
 
     def put_task_comlited(self, task):
         task.is_done = True
@@ -114,7 +120,6 @@ class TRADER_CONTROL:
         traders = []
         try:
             traders = self.db.query(TRADE).all()
-            print()
         except Exception as e:
             print(e)
         return traders
@@ -179,16 +184,31 @@ class TRADER_CONTROL:
             print(e)
 
     @staticmethod
+    def extract_parameters(trader):
+        parameters = {}
+        for value in trader.params.keys():
+            parameters.update(
+                {
+                    value: trader.__getattribute__(value)
+                }
+            )
+
+        return parameters
+
+    @staticmethod
     def update_params(new_trader, params):
         for param in params:
             if new_trader.__getattribute__(param) != params[param]:
                 new_trader.__setattr__(param, params[param])
 
     def put_trader_in_archive(self, trader, err=None):
+        updated_params = json.dumps(self.extract_parameters(trader))
+
         traders = self.__get_traders_from_db()
         for tr in traders:
             if tr.pair == trader.pair and tr.token_name == trader.account:
-                result = self.__create_archive_trader(tr, err)
+                result = self.__create_archive_trader(tr, updated_params, err)
+
                 if result:
                     res = self.__delete_trader_in_db(tr)
                     print('Результат удаления пары - %s' % res)
@@ -213,8 +233,8 @@ class TRADER_CONTROL:
                 return False
         return True
 
-    def __create_archive_trader(self, tr, err):
-        archive = ARCHIVE(tr.burse, tr.pair, tr.token_name, tr.tokens, tr.params, '%s' % err)
+    def __create_archive_trader(self, trader, updated_params, err):
+        archive = ARCHIVE(trader.burse, trader.pair, trader.token_name, trader.tokens, updated_params, '%s' % err)
         try:
             self.db.add(archive)
             self.db.commit()
@@ -237,6 +257,9 @@ class TRADER_CONTROL:
                 except Exception as e:
                     print(e)
                     self.put_trader_in_archive(trader, e)
+                else:
+                    self.saving_of_setup(trader)
+
             for trader in self.container:
                 if trader.pair_is_complited:
                     self.put_trader_in_archive(trader)

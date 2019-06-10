@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="Encoding">
-    <file url="file://$PROJECT_DIR$/LOGS/EXMO/Mopckou/XRP_USD.txt" charset="windows-1251" />
-    <file url="file://$PROJECT_DIR$/LOGS/EXMO/Morskoy/ADA_USD.txt" charset="windows-1251" />
-    <file url="file://$PROJECT_DIR$/LOGS/EXMO/Morskoy/XRP_USD.txt" charset="windows-1251" />
-    <file url="file://$PROJECT_DIR$/LOGS/EXMO/bot/ADA_USD.txt" charset="windows-1251" />
+    <file url="file://$PROJECT_DIR$/LOGS/EXMO/Mopckooou/ADA_USD/log.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/EXMO/bot/ADA_USD/log.txt" charset="windows-1251" />
-    <file url="file://$PROJECT_DIR$/LOGS/EXMO/bot/BTC_USD.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/TBot/chat id - 135797247/EDIT/log.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/TBot/chat id - 135797247/INFO/log.txt" charset="windows-1251" />
     <file url="file://$PROJECT_DIR$/LOGS/TBot/chat id - 135797247/RETURN/log.txt" charset="windows-1251" />
+    <file url="file://$PROJECT_DIR$/LOGS/TBot/chat id - 210133649/NEW/log.txt" charset="windows-1251" />
+    <file url="file://$PROJECT_DIR$/LOGS/TBot/chat id - 499349671/INFO/log.txt" charset="windows-1251" />
+    <file url="file://$PROJECT_DIR$/LOGS/TBot/chat id - 510432720/NEW/log.txt" charset="windows-1251" />
+    <file url="file://$PROJECT_DIR$/LOGS/TBot/chat id - 652164606/NEW/log.txt" charset="windows-1251" />
   </component>
 </project>

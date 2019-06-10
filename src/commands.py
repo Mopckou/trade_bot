@@ -2,8 +2,8 @@ import os
 import errno
 import json
 import time
-from src.trader import LOG_DIRECTORY
-from src.trader import TRADER
+from src.trader_new import LOG_DIRECTORY
+from src.trader_new import TRADER
 from src.dbase import TOKEN, TASK, TRADE, DISPATCH, ARCHIVE
 from src.burse import Exmo
 

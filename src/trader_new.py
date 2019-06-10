@@ -57,8 +57,8 @@ class TRADER:
     increase_cash_of_buy = True  # флаг повышать ли цену покупки при каждом закупе
     coeff_increase_of_cash = 2.  # коэффициент увеличения цены при каждом закупе
     waiting_time_before_buying = 300  # время ожидания перед покупкой в секундах
-    first_order = 0  # первый ордер покупки
-    order_book_size = 5
+    first_trader_id = 0.  # первый ордер покупки
+    order_book_size = 3
     is_end_trade = False
     pair_is_complited = False
     smoll_fraction = 15
@@ -79,7 +79,7 @@ class TRADER:
         'is_end_trade': "Остановить пару после полной продажи.",
         'smoll_fraction': "Допустимое количество Сатоши сверху пересчитанной суммы.",
         'waiting_time_before_buying': "Время ожидания перед покупкой. Указывать время в секундах!",
-        'first_order': "Номер первого закупочного ордера.",
+        'first_trader_id': "Номер первого закупочного ордера.",
         'order_book_size': "Размер стакана в пределах котого допустима перебивка"
     }
 
@@ -136,6 +136,14 @@ class TRADER:
                 os.remove(self.log)
             except Exception as ex:
                 print('ОШИБКА АРХИВИРОВАНИЯ: %s' % ex)
+
+    # @property
+    # def first_order(self):
+    #     return self.__first_order
+    #
+    # @first_order.setter
+    # def first_order(self, order):
+    #     self.__first_order = int(order)
 
     def run(self):
         self.pair_info = 'Время сбора информации:\n%s\n' % time.ctime()
@@ -224,8 +232,8 @@ class TRADER:
         if self.is_open_orders(open_orders):
             self.cancel_all_open_orders(open_orders[self.pair])
 
-        if self.first_order:  # self.is_more_currency_in_pair():
-            self.logging('Первый ордер покупки: %s. Переходим в блок SELL.' % self.first_order)
+        if self.first_trader_id:  # self.is_more_currency_in_pair():
+            self.logging('Первый trader id покупки: %s. Переходим в блок SELL.' % self.first_trader_id)
             self.flag = STAGE.SELL
             return
 
@@ -246,11 +254,11 @@ class TRADER:
             profit
         )
 
+        self.first_trader_id = 0.
         if self.is_end_trade:
             self.pair_is_complited = True
             return
 
-        self.first_order = None
         self.flag = STAGE.BUY
         return
 
@@ -330,10 +338,12 @@ class TRADER:
 
     def __get_new_quantity_of_buy(self):
         quantities = []
-        last_orders = self.get_important_orders()
-        if not last_orders:
+
+        if not self.first_trader_id:
             self.logging(u'Покупаем стандартное количество - %s.' % self.quantity_cash_of_buy)
             return self.quantity_cash_of_buy
+
+        last_orders = self.get_important_orders()
         for order in last_orders:
             if order['type'] == 'sell':
                 continue
@@ -410,7 +420,7 @@ class TRADER:
             self.flag = STAGE.SELL
             self.count_order_trades = 0
 
-        elif not self.order_is_first(open_orders[self.pair], 'bid'):
+        elif not self.order_is_relevant(open_orders[self.pair], 'bid'):
             self.logging(u'Оредр перебит. Отмена ордера.')
             self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.BUY
@@ -425,9 +435,11 @@ class TRADER:
             self.cancel_all_open_orders(open_orders[self.pair])
             self.count_order_trades = 0  # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
 
-        if self.flag == STAGE.SELL and not self.first_order:
+        if self.flag == STAGE.SELL and not self.first_trader_id:
             self.logging('Первый ордер = %s' % self.last_order_id)
-            self.first_order = self.last_order_id
+            first_trade_id = self.get_first_trade_id(self.last_order_id)
+            self.logging('Первый trade id = %s' % first_trade_id)
+            self.first_trader_id = first_trade_id
 
     def block_of_wait_sell(self):
         open_orders = self.api.get_open_orders()
@@ -436,7 +448,7 @@ class TRADER:
             self.flag = STAGE.REPORT
             self.count_order_trades = 0
 
-        elif not self.order_is_first(open_orders[self.pair], 'ask'):
+        elif not self.order_is_relevant(open_orders[self.pair], 'ask'):
             self.logging(u'Оредр перебит. Отмена ордера.')
             self.cancel_all_open_orders(open_orders[self.pair])
             self.flag = STAGE.SELL
@@ -448,7 +460,7 @@ class TRADER:
             self.flag = STAGE.SELL
             self.count_order_trades = 0  # колличество сделок по ордеру, обнуляем после выходы из блока ождания покупки.
 
-    def order_is_not_relevant(self, open_orders, type):
+    def order_is_relevant(self, open_orders, type):
         order = self.get_open_order_by_id(open_orders)
         price, quantity, amount = order["price"], order["quantity"], order["amount"]
         trades = self.get_trades(type, self.order_book_size)
@@ -467,6 +479,11 @@ class TRADER:
         # quantity = first_order[1]
         # amount = first_order[2]
         # return price, quantity, amount
+
+    def get_first_trade_id(self, order_id):
+        order = self.get_order_trades(order_id)
+        self.logging('order trades: %s' % order)
+        return order['trades'][-1]['trade_id']
 
     def order_is_purchased(self, open_orders):
         if self._order_is_purchased(open_orders):
@@ -505,7 +522,6 @@ class TRADER:
         order_trades = self.get_order_trades(self.last_order_id)
         if not order_trades:
             return False
-
         self.logging(u'order trades: %s' % order_trades)
         count_order_trades_now = len(order_trades['trades'])
         if self.count_order_trades != count_order_trades_now:
@@ -516,7 +532,7 @@ class TRADER:
         self.logging(u'Орден частично не выкупался!')
         return False
 
-    def get_order_trades(self, order_id):
+    def get_order_trades(self, order_id) -> list:
         try:
             order_trades = self.api.order_trades(order_id)
         except Exception as ex:
@@ -604,29 +620,22 @@ class TRADER:
         raise Exception(u'Ошибка коррекции количества.')
 
     def get_important_orders(self):
+        self.logging('Первый ордер покупки %s' % self.first_trader_id)
         last_orders = self.api.user_trades(self.pair)[self.pair]
         self.logging(u'user trades - %s' % last_orders)
         cash_in_currency = float(self.__get_balances()[self.in_currency])
         self.logging(u'Количество валюты на счету %s (%s)' % (cash_in_currency, self.in_currency))
-        important_orders = []
-        # if cash_in_currency == self.minimum_cash_in_currency:
-        #     self.logging(u'Покупки еще не совершались.')
-        #     return []
-        # for order in last_orders:
-        #     important_orders.append(order)
-        #     if order['type'] == 'sell':
-        #         cash_in_currency += float(order['quantity'])
-        #     elif order['type'] == 'buy':
-        #         buy_quantity = float(order['quantity'])
-        #         cash_in_currency -= buy_quantity - (buy_quantity * self.percent_of_burse)
-        #     self.logging('cash %s' % cash_in_currency)
-        #     self.logging('cash round %s' % round(cash_in_currency, 9))
-        #     self.logging(self.__equal(cash_in_currency))
-        #     if self.__equal(round(cash_in_currency, 9)):
-        #         sell, buy = self.get_count_sell_and_buy(important_orders)
-        #         self.logging(u'Пследние ордера покупок (количество закупок - %s, количество продаж - %s) - %s' % (buy, sell, len(important_orders)))
-        #         return important_orders
-        # raise ErrorFoundPurchases
+
+        number = None
+        for num, order in enumerate(last_orders):
+            if order['trade_id'] == self.first_trader_id:
+                number = num
+
+        if number is not None:
+            self.logging('Ордера с начала торговли: %s' % last_orders[:number + 1])
+            return last_orders[:number + 1]
+
+        raise ErrorFoundPurchases
 
     def get_count_sell_and_buy(self, orders):
         sell = 0
@@ -660,10 +669,11 @@ class TRADER:
         return amount
 
     def get_quantity_for_sell(self, quantity_in_currency, last_important_purchases):
-        quantity_for_sell = self.__correction_quantity(
-            quantity_in_currency,
-            self.__get_quantity_by_last_orders(last_important_purchases)
-        )
+        quantity_for_sell = self.__get_quantity_by_last_orders(last_important_purchases)
+        #     self.__correction_quantity(
+        #     quantity_in_currency,
+        #     self.__get_quantity_by_last_orders(last_important_purchases)
+        # )
         is_currency = self.is_currency(self.in_currency, quantity_for_sell)
         if not is_currency:
             raise ErrorEnoughCash(u'ВНИМАНИЕ! Недостаточно средств на счету. Этой ошибки не должно быть!')
@@ -680,9 +690,8 @@ class TRADER:
         return price
 
     def calc_profit(self):
-        first_purchase = self.last_important_purchases[-1]['order_id']
-        self.logging('Номер ордера первой покупки: %s' % first_purchase)
-        last_orders = self.get_orders_before_first_purchase(first_purchase)
+        self.logging('Номер ордера первой покупки: %s' % self.first_trader_id)
+        last_orders = self.get_important_orders()
         self.logging('last orders: %s' % last_orders)
         amount_spent = round(self.get_amount_spent(last_orders), 9)
         amount_received = round(self.get_amount_received(last_orders), 9)
@@ -690,15 +699,6 @@ class TRADER:
         self.logging('Потрачено: %s, получено: %s, профит: %s' % (amount_spent, amount_received, profit))
         return amount_spent, amount_received, profit
 
-    def get_orders_before_first_purchase(self, order_id):
-        order_list = []
-        orders = self.api.user_trades(self.pair)[self.pair]
-        self.logging('user trades: %s' % orders)
-        for order in orders:
-            order_list.append(order)
-            if order['order_id'] == order_id:
-                return order_list
-        raise Exception('Error find first order.')
 
     def get_amount_received(self, last_orders):
         amount_summ = 0.

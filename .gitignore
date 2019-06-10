@@ -61,3 +61,8 @@ src/__pycache__/burse.cpython-36.pyc
 .idea/misc.xml
 .idea/trade_bot.iml
 .idea/workspace.xml
+*.db
+src/db/TRADE_DATA_BASE.db
+LOGS/EXMO/bot/ADA_USD/01-06-19 11
+*.iml
+*.xml
