@@ -637,7 +637,8 @@ class TRADER:
 
         raise ErrorFoundPurchases
 
-    def get_count_sell_and_buy(self, orders):
+    @staticmethod
+    def get_count_sell_and_buy(orders):
         sell = 0
         buy = 0
         for order in orders:

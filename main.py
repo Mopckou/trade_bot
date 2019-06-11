@@ -9,6 +9,10 @@ from sqlalchemy.orm import sessionmaker
 from logging import log
 
 
+class PairNotFound(Exception):
+    pass
+
+
 class TRADER_CONTROL:
 
     def __init__(self, db):
@@ -88,13 +92,20 @@ class TRADER_CONTROL:
         params = data['trader_data']
         token_name = data['token_name']
 
-        result = self.__edit_trader_in_db(pair, token_name, params)
+        try:
+            result = self.__edit_trader_in_db(pair, token_name, params)
+        except PairNotFound:
+            print('Пара не найдена!')
+            self.report_to_user(task.user_id, u'Пара %s не в работе. Ошибка изменения настроек!' % pair)
+            return True
+
         if result:
             trader = self.__get_trader_in_container(pair, token_name)
             self.update_params(trader, params)
             self.report_edit_trader(task.user_id, task)
             print('Изменены настройки пары!')
             return True
+
         print('Настройки пары не изменены!')
         return False
 
@@ -104,6 +115,10 @@ class TRADER_CONTROL:
         for trader in traders:
             if trader.pair == pair and trader.token_name == token_name:
                 trader.params = json.dumps(params)
+                break
+        else:
+            raise PairNotFound
+
         try:
             self.db.commit()
         except Exception as e:
@@ -156,15 +171,15 @@ class TRADER_CONTROL:
         print('Пара восстановлена после выключения бота. (%s)' % trader.pair)
 
     def report_new_trader(self, user_id, task):
-        report = REPORT(user_id, 'Пара в работе! Задание номер - %s выполнено.' % task.id)
-        try:
-            self.db.add(report)
-            self.db.commit()
-        except Exception as e:
-            print(e)
+        msg = 'Пара в работе! Задание номер - %s выполнено.' % task.id
+        return self.report_to_user(user_id, msg)
 
     def report_edit_trader(self, user_id, task):
-        report = REPORT(user_id, 'Настройки пары изменены! Задание номер - %s выполнено.' % (task.id))
+        msg = 'Настройки пары изменены! Задание номер - %s выполнено.' % task.id
+        return self.report_to_user(user_id, msg)
+
+    def report_to_user(self, user_id, msg):
+        report = REPORT(user_id, msg)
         try:
             self.db.add(report)
             self.db.commit()
@@ -173,15 +188,13 @@ class TRADER_CONTROL:
 
     def report_archive_trader(self, pair, err):
         if err is None:
-            ans = 'На паре - %s торговля завершена. Ошибок нет. \n\nВведите команду /return для возообновления работы пары.' % (pair)
+            ans = 'На паре - %s торговля завершена. Ошибок нет. \n\n' \
+                  'Введите команду /return для возообновления работы пары.' % (pair)
         else:
-            ans = 'Ошибка! Пара - %s выключена и помещена в архив!\nОшибка - %s.\n\nВведите команду /return для возообновления работы пары.' % (pair, err)
-        report = REPORT(0, ans)
-        try:
-            self.db.add(report)
-            self.db.commit()
-        except Exception as e:
-            print(e)
+            ans = 'Ошибка! Пара - %s выключена и помещена в архив!\nОшибка - %s.\n\n' \
+                  'Введите команду /return для возообновления работы пары.' % (pair, err)
+
+        return self.report_to_user(0, ans)
 
     @staticmethod
     def extract_parameters(trader):
